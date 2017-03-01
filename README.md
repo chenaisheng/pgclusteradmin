@@ -195,3 +195,25 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     接收对象中: 100% (3613/3613), 1.24 MiB | 228.00 KiB/s, done.
     处理 delta 中: 100% (2481/2481), done.
     
+###四、pgclusteradmin部署配置和访问
+
+####下载pgclusteradmin源码
+
+    [root@ad pgclusteradmin]# cd /home/ad
+    [root@ad ad]# git clone https://github.com/chenaisheng/pgclusteradmin
+    正克隆到 'pgclusteradmin'...
+    remote: Counting objects: 374, done.
+    remote: Compressing objects: 100% (177/177), done.
+    remote: Total 374 (delta 201), reused 348 (delta 185), pack-reused 0
+    接收对象中: 100% (374/374), 284.09 KiB | 197.00 KiB/s, done.
+    处理 delta 中: 100% (201/201), done.
+    [root@ad ad]#
+
+####运行pgclusteradmin
+
+    [root@ad ad]# cd pgclusteradmin/
+    [root@ad pgclusteradmin]# go run pgclusteradmin.g
+
+####访问pgclusteradmin
+
+打开一个浏览器，输入 http://192.168.1.10:10001即可进入管理器，192.168.1.10换成你自己ip地址即可。
