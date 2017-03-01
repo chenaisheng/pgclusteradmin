@@ -15,7 +15,7 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 * golang: go version go1.7.4 linux/amd64
 * Postgresql：9.6.1 
 
-###三、Pgclusteradmin部署方法
+###三、Pgclusteradmin环境需求
 
 ####安装golang
 
