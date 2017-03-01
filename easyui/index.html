@@ -1,0 +1,1055 @@
+<html>
+<head>
+ <meta charset="UTF-8">
+ <title>Postgresql集群管理器1.0</title>
+ <link rel="stylesheet" type="text/css" href="./themes/bootstrap/easyui.css">
+ <link rel="stylesheet" type="text/css" href="./themes/icon.css">
+ <link rel="stylesheet" type="text/css" href="./themes/color.css">
+ <link rel="stylesheet" type="text/css" href="./themes/pgclusteradmin.css"> 
+ <script type="text/javascript" src="./jquery.min.js"></script>
+ <script type="text/javascript" src="./jquery.easyui.min.js"></script>
+ <script type="text/javascript" src="./jquery.easyui.rule.js"></script> 
+ <script type="text/javascript" src="./locale/easyui-lang-zh_CN.js"></script>
+</head>
+<body>
+
+
+<div id='Loading' style="position:absolute;z-index:1000;top:0px;left:0px;width:100%;height:58%;background:#f2f2f2;text-align:center;padding-top: 20%;">
+<h1><image src='./themes/default/images/loading.gif'/><font color="#15428B">加载中···</font></h1>
+</div>
+
+
+<table id="dg" class="easyui-datagrid">
+ <thead data-options="frozen:true">    
+   <tr>       
+     <th field="id" checkbox="true"></th> 
+     <!--<th data-options="field:'id',sortable:true,width:'100px'">节点编号</th>  -->
+     <th data-options="field:'node_name',sortable:true,width:'150px'">节点名称</th>
+     <th data-options="field:'createtime',sortable:true,width:'200px'">建立时间</th> 
+     <th data-options="field:'service_type',width:'80px'">节点类别</th>    
+     <th data-options="field:'service_status',width:'80px'">运行状态</th>   
+     <th data-options="field:'pg_version',width:'120px'">版本信息</th>   
+   </tr>
+ </thead>   
+ <thead>
+   <tr> 
+     <th data-options="field:'host',width:'130px'">主机名或IP</th> 
+     <th data-options="field:'ssh_port',width:'80px'">SSH端口号</th>    
+     <th data-options="field:'ssh_user',width:'100px'">SSH用户名</th> 
+     <!--<th data-options="field:'ssh_password',width:'100px'">SSH登录密码</th>-->
+     <th data-options="field:'pg_bin',width:'200px'">PG服务端程序路径</th>
+     <th data-options="field:'pg_data',width:'200px'">PGDATA所在路径</th>
+     <th data-options="field:'pg_port',width:'80px'">PG服务端口号</th> 
+     <th data-options="field:'pg_database',width:'100px'">连接数据库名称</th> 
+     <th data-options="field:'pg_user',width:'100px'">数据库用户名称</th> 
+     <!--<th data-options="field:'pg_password',width:'100px'">数据库用户密码</th>-->
+     <th data-options="field:'master_vip',width:'100px'">做为主节点时绑定VIP</th>
+     <th data-options="field:'master_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
+     <th data-options="field:'slave_vip',width:'100px'">做为备节点时绑定VIP</th>
+     <th data-options="field:'slave_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
+     <th data-options="field:'bind_vip_user',width:'100px'">绑定网卡操作用户</th>
+     <!--<th data-options="field:'bind_vip_password',width:'100px'">绑定网卡操作密码</th>-->  
+     <th data-options="field:'remark',width:'200px'">备注</th>  
+   </tr>
+ </thead>
+</table>
+
+<div id="tb" style="height:auto">
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-add',plain:true" id="cy_insert_click">增加节点</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-edit',plain:true" id="cy_update_click">修改资料</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-remove',plain:true" id="cy_delete_click">删除节点</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-service',plain:true" id="cy_serviceadmin_click">服务管理</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-promote',plain:true" id="cy_promote_click">主备切换</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-password',plain:true" id="cy_password_click">修改登录密码</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-exit',plain:true" id="cy_exit_click">退出</a>  
+</div>
+
+<!--修改资料窗口-->
+<div id="update_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#update_dialog_buttons',closed:true,width:680,height:518,closable:true"> <!--modal是遮罩层--> 
+ <div style="padding:30px 5px 5px 10px">      
+   <form id="update_dialog_form" method="post"> 
+       <table cellpadding="3" width="99%">
+          <tr>
+            <td align="center" width="120">节点编号</td>
+            <td><input class="easyui-textbox" name="id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+            <td align="center" width="120">节点名称</td>
+            <td><input class="easyui-textbox" name="node_name" data-options="required:true"/></td>
+          </tr> 
+          <tr>
+            <td align="center" width="120">主机名或IP</td>
+            <td><input class="easyui-textbox" name="host" data-options="required:true" /></td>
+            <td align="center" width="120">SSH端口号</td>
+            <td><input class="easyui-numberbox" name="ssh_port" data-options="required:true,min:1,precision:0"/></td>
+          </tr> 
+          <tr>
+            <td align="center">SSH用户名</td>
+            <td><input class="easyui-textbox" name="ssh_user" data-options="required:true"/></td>
+            <td align="center">SSH登录密码</td>
+            <td><input class="easyui-passwordbox" name="ssh_password" id="update_ssh_password" iconWidth="28" data-options="required:true"/></td>
+          </tr> 
+          <tr>
+            <td align="center" width="120">PG服务端程序路径</td>
+            <td colspan="3"><input class="easyui-textbox" name="pg_bin" data-options="required:true,width:492"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">PGDATA所在路径</td>
+            <td colspan="3"><select class="easyui-textbox" name="pg_data" data-options="required:true,width:492"/></td> 
+          </tr> 
+          <tr>
+            <td align="center">PG服务端口号</td>
+            <td><input class="easyui-numberbox" name="pg_port" data-options="required:true,min:1,precision:0"/></td>
+            <td align="center">连接数据库名称</td>
+            <td><input class="easyui-textbox" name="pg_database" data-options="required:true"/></td>
+          </tr> 
+          <tr>
+            <td align="center">数据库用户名称</td>
+            <td><input class="easyui-textbox" name="pg_user" data-options="required:true"/></td>
+            <td align="center">数据库用户密码</td>
+            <td><input class="easyui-passwordbox" name="pg_password" id="update_pg_password" iconWidth="28" data-options="required:true"/></td>
+          </tr> 
+          <tr>
+            <td align="center">做为主节点绑定VIP</td>
+            <td><input class="easyui-textbox" name="master_vip" data-options="required:false,validType:['isip']"/></td>
+            <td align="center">VIP绑定设备号</td>
+            <td><input class="easyui-textbox" name="master_vip_networkcard" data-options="required:false,prompt:'如eth0:1'"/></td>
+          </tr>  
+          <tr>
+            <td align="center">做为备节点绑定VIP</td>
+            <td><input class="easyui-textbox" name="slave_vip" data-options="required:false,validType:['isip']"/></td>
+            <td align="center">VIP绑定设备号</td>
+            <td><input class="easyui-textbox" name="slave_vip_networkcard" data-options="required:false,prompt:'如eth0:1'"/></td>
+          </tr> 
+          <tr>
+            <td align="center">绑定网卡操作用户</td>
+            <td><input class="easyui-textbox" name="bind_vip_user" data-options="required:false"/></td>
+            <td align="center">绑定网卡操作密码</td>
+            <td><input class="easyui-passwordbox" name="bind_vip_password" id="update_bind_vip_password" iconWidth="28" data-options="required:false"/></td>
+          </tr> 
+          <tr>
+            <td align="center" width="120">备注</td>
+            <td colspan="3"><input class="easyui-textbox" name="remark" data-options="multiline:true,width:492,height:60"  ></input></td> 
+          </tr>          
+       </table>
+                        
+   </form>
+ </div>
+</div>
+<div id="update_dialog_buttons">
+    <a href="javascript:void(0)" class="easyui-linkbutton c2" id="update_dialog_save" data-options="iconCls:'icon-save',width:80">保存</a>
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="update_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
+</div>                    
+<!--修改资料窗口-->
+
+<!--服务管理窗口-->
+<div id="serviceadmin_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#serviceadmin_dialog_buttons',closed:true,width:680,height:528,closable:true"> <!--modal是遮罩层--> 
+ <div style="padding:30px 5px 5px 10px">      
+   <form id="serviceadmin_dialog_form" method="post"> 
+       <table cellpadding="3" width="99%">
+          <tr>
+            <td align="center" width="120">节点编号</td>
+            <td><input class="easyui-textbox" name="id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+            <td align="center" width="120">节点名称</td>
+            <td><input class="easyui-textbox" name="node_name" data-options="readonly:true"/></td>
+          </tr>
+          <tr>
+            <td align="center" width="120">节点类别</td>
+            <td><input class="easyui-textbox" name="service_type" data-options="readonly:true"/></td>
+            <td align="center" width="120">运行状态</td>
+            <td><input class="easyui-textbox" name="service_status" id="service_status" data-options="readonly:true"/></td>
+          </tr>
+          <tr>
+            <td align="center" width="120">版本号</td>
+            <td colspan="3"><input class="easyui-textbox" name="pg_version" id="pg_version" data-options="readonly:true,width:492"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">主机名或IP</td>
+            <td><input class="easyui-textbox" name="host" data-options="readonly:true" /></td>
+            <td align="center" width="120">SSH端口号</td>
+            <td><input class="easyui-numberbox" name="ssh_port" data-options="readonly:true"/></td>
+          </tr> 
+          <tr>
+            <td align="center">SSH用户名</td>
+            <td><input class="easyui-textbox" name="ssh_user" data-options="readonly:true"/></td>
+            <td align="center">SSH登录密码</td>
+            <td><input class="easyui-passwordbox" name="ssh_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
+          </tr> 
+          <tr>
+            <td align="center" width="120">PG服务端程序路径</td>
+            <td colspan="3"><input class="easyui-textbox" name="pg_bin" id="pg_bin" data-options="readonly:true,width:492"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">PGDATA所在路径</td>
+            <td colspan="3"><select class="easyui-textbox" name="pg_data" id="pg_data" data-options="readonly:true,width:492"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">关闭模式</td>
+            <td colspan="3"><select class="easyui-combobox" name="mode" id="mode" data-options="editable:false,panelHeight:'auto',width:492,valueField: 'value',textField: 'label',data: [{label: 'smart',value: 'smart',selected:true},{label: 'fast',value: 'fast'},{label: 'immediate',value: 'immediate'}]" required="true"></select></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">执行命令</td>
+            <td colspan="3"><input class="easyui-textbox" name="run_command" id="run_command" data-options="readonly:true,multiline:true,width:492,height:60"  ></input></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">执行结果</td>
+            <td colspan="3"><input class="easyui-textbox" name="exec_result" id="exec_result" data-options="readonly:true,multiline:true,width:492,height:60"  ></input></td> 
+          </tr>          
+       </table>         
+   </form>
+ </div>
+</div>
+<div id="serviceadmin_dialog_buttons">
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_start" data-options="iconCls:'icon-start',width:80">start</a>
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_stop" data-options="iconCls:'icon-stop',width:80">stop</a>
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_restart" data-options="iconCls:'icon-restart',width:80">restart</a>   
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_reload" data-options="iconCls:'icon-reload',width:80">reload</a>   
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_status" data-options="iconCls:'icon-status',width:80">status</a>   
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+</div>                    
+<!--服务管理窗口-->
+
+
+<!--主备切换窗口-->
+<div id="promote_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#promote_dialog_buttons',closed:true,width:710,height:688,closable:true"> <!--modal是遮罩层--> 
+   <form id="promote_dialog_form" method="post"> 
+     <div class="easyui-tabs" id="promote_tabs" fit="true" style="width:100%;height:600px"> 
+       <div title="主节点（master）" style="padding:10px">
+         <table cellpadding="3" width="99%">
+           <tr>
+             <td align="center" width="120">节点编号</td>
+             <td><input class="easyui-textbox" name="master_id" id="promote_master_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+             <td align="center" width="120">节点名称</td>
+             <td><input class="easyui-textbox" name="master_node_name" data-options="readonly:true"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">节点类别</td>
+             <td><input class="easyui-textbox" name="master_service_type" data-options="readonly:true"/></td>
+             <td align="center" width="120">运行状态</td>
+             <td><input class="easyui-textbox" name="master_service_status" data-options="readonly:true"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">版本号</td>
+             <td colspan="3"><input class="easyui-textbox" name="master_pg_version" data-options="readonly:true,width:502"/></td> 
+           </tr> 
+           <tr>
+             <td align="center" width="120">主机名或IP</td>
+             <td><input class="easyui-textbox" name="master_host" data-options="readonly:true" /></td>
+             <td align="center" width="120">SSH端口号</td>
+             <td><input class="easyui-numberbox" name="master_ssh_port" data-options="readonly:true"/></td>
+           </tr> 
+           <tr>
+             <td align="center">SSH用户名</td>
+             <td><input class="easyui-textbox" name="master_ssh_user" data-options="readonly:true"/></td>
+             <td align="center">SSH登录密码</td>
+             <td><input class="easyui-passwordbox" name="master_ssh_password" data-options="readonly:false"/></td>
+           </tr> 
+           <tr>
+             <td align="center" width="120">PG服务端程序路径</td>
+             <td colspan="3"><input class="easyui-textbox" name="master_pg_bin" id="master_pg_bin" data-options="readonly:true,width:502"/></td> 
+           </tr> 
+           <tr>
+             <td align="center" width="120">PGDATA所在路径</td>
+             <td colspan="3"><select class="easyui-textbox" name="master_pg_data" id="master_pg_data" data-options="readonly:true,width:502"/></td> 
+           </tr> 
+           <tr>
+             <td align="center">PG服务端口号</td>
+             <td><input class="easyui-numberbox" name="master_pg_port" data-options="readonly:true"/></td>
+             <td align="center">连接数据库名称</td>
+             <td><input class="easyui-textbox" name="master_pg_database" data-options="readonly:true"/></td>
+           </tr> 
+           <tr>
+             <td align="center">数据库用户名称</td>
+             <td><input class="easyui-textbox" name="master_pg_user" data-options="readonly:true"/></td>
+             <td align="center">数据库用户密码</td>
+             <td><input class="easyui-passwordbox" name="master_pg_password" data-options="readonly:false"/></td>
+           </tr>  
+           <tr>
+             <td align="center" width="120">IP绑定详情</td>
+             <td colspan="3"><input class="easyui-textbox" name="master_ip_status" id="master_ip_status" data-options="readonly:true,multiline:true,width:502,height:250"></input></td> 
+           </tr>   
+         </table> 
+       </div>
+       <div title="备节点（slave）" style="padding:10px">
+         <table cellpadding="3" width="99%">
+           <tr>
+             <td align="center" width="120">节点编号</td>
+             <td><input class="easyui-textbox" name="slave_id" id="promote_slave_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+             <td align="center" width="120">节点名称</td>
+             <td><input class="easyui-textbox" name="slave_node_name" data-options="readonly:true"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">节点类别</td>
+             <td><input class="easyui-textbox" name="slave_service_type" data-options="readonly:true"/></td>
+             <td align="center" width="120">运行状态</td>
+             <td><input class="easyui-textbox" name="slave_service_status" data-options="readonly:true"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">版本号</td>
+             <td colspan="3"><input class="easyui-textbox" name="slave_pg_version" data-options="readonly:true,width:502"/></td> 
+           </tr> 
+           <tr>
+             <td align="center" width="120">主机名或IP</td>
+             <td><input class="easyui-textbox" name="slave_host" data-options="readonly:true" /></td>
+             <td align="center" width="120">SSH端口号</td>
+             <td><input class="easyui-numberbox" name="slave_ssh_port" data-options="readonly:true"/></td>
+           </tr> 
+           <tr>
+             <td align="center">SSH用户名</td>
+             <td><input class="easyui-textbox" name="slave_ssh_user" data-options="readonly:true"/></td>
+             <td align="center">SSH登录密码</td>
+             <td><input class="easyui-passwordbox" name="slave_ssh_password" data-options="readonly:false"/></td>
+           </tr> 
+           <tr>
+             <td align="center" width="120">PG服务端程序路径</td>
+             <td colspan="3"><input class="easyui-textbox" name="slave_pg_bin" id="slave_pg_bin" data-options="readonly:true,width:502"/></td> 
+           </tr> 
+           <tr>
+             <td align="center" width="120">PGDATA所在路径</td>
+             <td colspan="3"><select class="easyui-textbox" name="slave_pg_data" id="slave_pg_data" data-options="readonly:true,width:502"/></td> 
+           </tr>
+           <tr>
+             <td align="center">PG服务端口号</td>
+             <td><input class="easyui-numberbox" name="slave_pg_port" data-options="readonly:true"/></td>
+             <td align="center">连接数据库名称</td>
+             <td><input class="easyui-textbox" name="slave_pg_database" data-options="readonly:true"/></td>
+           </tr> 
+           <tr>
+             <td align="center">数据库用户名称</td>
+             <td><input class="easyui-textbox" name="slave_pg_user" data-options="readonly:true"/></td>
+             <td align="center">数据库用户密码</td>
+             <td><input class="easyui-passwordbox" name="slave_pg_password" data-options="readonly:false"/></td>
+           </tr>  
+           <tr>
+             <td align="center" width="120">IP绑定详情</td>
+             <td colspan="3"><input class="easyui-textbox" name="slave_ip_status" id="slave_ip_status" data-options="readonly:true,multiline:true,width:502,height:250"></input></td> 
+           </tr>  
+         </table>  
+       </div>
+       <div title="切换参数配置" style="padding:10px">
+         <table cellpadding="3" width="99%">  
+           <tr>
+             <td align="center" width="120">复制参数（recovery.conf）</td>
+             <td colspan="3"><input class="easyui-textbox" name="recovery_conf" data-options="readonly:true,multiline:true,width:502,height:90"></input></td> 
+           </tr>  
+           <tr>
+             <td align="center" width="120">主节点切为备节点参数</td> 
+             <td colspan="3" height="40"><div class="datagrid-toolbar c6"></div></td>
+           </tr>     
+           <tr>
+             <td align="center" width="120">切换前解绑vip</td>
+             <td><input class="easyui-textbox" name="master_unbind_vip" id="master_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_bind_vip\']','master_slave_vip_equal[\'#slave_unbind_vip\']']"/></td>
+             <td align="center" width="120">解绑网卡设备号</td>
+             <td><input class="easyui-textbox" name="master_unbind_vip_networkcard" id="master_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">切换后绑定vip</td>
+             <td><input class="easyui-textbox" name="master_bind_vip" id="master_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_unbind_vip\']','master_slave_vip_equal[\'#slave_bind_vip\']']"/></td>
+             <td align="center" width="120">绑定网卡设备号</td>
+             <td><input class="easyui-textbox" name="master_bind_vip_networkcard" id="master_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
+           </tr>
+            <tr>
+             <td align="center" width="120">绑定操作用户</td>
+             <td><input class="easyui-textbox" name="master_bind_user" id="master_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
+             <td align="center" width="120">操作用户密码</td>
+             <td><input class="easyui-passwordbox" name="master_bind_password" id="master_bind_password" data-options="readonly:false"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">备节点切为主节点参数</td> 
+             <td colspan="3" height="40"><div class="datagrid-toolbar c6"></div></td>
+           </tr>       
+           <tr>
+             <td align="center" width="120">切换前解绑vip</td>
+             <td><input class="easyui-textbox" name="slave_unbind_vip" id="slave_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_bind_vip\']','master_slave_vip_equal[\'#master_unbind_vip\']']"/></td>
+             <td align="center" width="120">解绑网卡设备号</td>
+             <td><input class="easyui-textbox" name="slave_unbind_vip_networkcard" id="slave_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">切换后绑定vip</td>
+             <td><input class="easyui-textbox" name="slave_bind_vip" id="slave_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_unbind_vip\']','master_slave_vip_equal[\'#master_bind_vip\']']"/></td>
+             <td align="center" width="120">绑定网卡设备号</td>
+             <td><input class="easyui-textbox" name="slave_bind_vip_networkcard" id="slave_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">绑定操作用户</td>
+             <td><input class="easyui-textbox" name="slave_bind_user" id="slave_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
+             <td align="center" width="120">操作用户密码</td>
+             <td><input class="easyui-passwordbox" name="slave_bind_password" id="slave_bind_password" data-options="readonly:false"/></td>
+           </tr> 
+           <tr>
+             <td colspan="4" height="10"></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">执行结果</td>
+             <td colspan="3"><input class="easyui-textbox" name="promote_exec_result" id="promote_exec_result" data-options="readonly:true,multiline:true,width:502,height:90"></input></td> 
+           </tr> 
+           <tr>
+             <td colspan="4" height="10"></td>
+           </tr>
+           <tr>
+             <td align="center" width="120">切换说明</td>
+             <td colspan="3">除复制参数（recovery.conf）外，vip绑定视需要填写，不填写不执行vip绑定功能，Linnx下绑定vip一般需要root权限。</td> 
+           </tr>          
+         </table>  
+       </div>
+     </div>                   
+   </form>  
+</div>
+<div id="promote_dialog_buttons">
+    <a href="javascript:void(0)" class="easyui-linkbutton c5" id="promote_dialog_start" data-options="iconCls:'icon-promote',width:100">一键切换</a>  
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="promote_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>      
+    <a href="javascript:void(0)" class="easyui-linkbutton" id="promote_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+</div>                    
+<!--主务切换窗口-->
+
+<!--操作员密码修改窗口-->
+<div id="password_update_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:true"> <!--modal是遮罩层--> 
+ <div style="padding:30px 5px 5px 10px">      
+ <form id="password_update_dialog_form" method="post">
+    <div style="margin-bottom:20px;text-align:center;">
+      <input class="easyui-passwordbox" name="old_password" id="old_password" prompt="旧密码" iconWidth="30" data-options="required:false" style="width:50%;height:42px;padding:10px"/>
+    </div>
+    <div style="margin-bottom:20px;text-align:center;">
+      <input class="easyui-passwordbox" name="new_password" id="new_password" prompt="新密码" iconWidth="30" data-options="required:false" style="width:50%;height:42px;padding:10px"/>
+    </div>
+    <div style="margin-bottom:20px;text-align:center;">
+      <input class="easyui-passwordbox" name="new_password_confirm" id="new_password_confirm" prompt="新密码确认" iconWidth="30" data-options="required:false,validType:['password_equal[\'#new_password\']']" style="width:50%;height:42px;padding:10px"/>
+    </div>
+    <div style="text-align:center;padding:5px 0">
+      <a href="javascript:void(0)" class="easyui-linkbutton c5" id="password_update"  data-options="plain:true" style="width:50%;height:35px">确认修改</a>
+    </div>
+  </form>  
+ </div>
+</div>            
+<!--操作员密码修改窗口-->
+
+<!--登录窗口-->
+<div id="login_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:false"> <!--modal是遮罩层--> 
+ <div style="padding:50px 5px 5px 10px">      
+ <form id="login_dialog_form" method="post">
+    <div style="margin-bottom:20px;text-align:center;">
+      <input class="easyui-textbox" prompt="登录账号" name="username" id="username" data-options="iconCls:'icon-man',iconWidth:30" style="width:50%;height:42px;padding:10px;">
+    </div>
+    <div style="margin-bottom:20px;text-align:center;">
+      <input class="easyui-passwordbox" name="password" id="password" prompt="登录密码" iconWidth="30" data-options="required:false" style="width:50%;height:42px;padding:10px"/>
+    </div>    
+    <div style="text-align:center;padding:5px 0">
+      <a href="javascript:void(0)" class="easyui-linkbutton c5" id="login_dialog_login"  data-options="plain:true" style="width:50%;height:35px">登录</a>
+    </div>
+  </form>  
+ </div>
+</div>            
+<!--登录窗口-->
+
+ 
+<script type="text/javascript">
+
+
+
+var url="";
+
+$(document).ready(function()
+{     
+    //数据表属性初始化       
+    $('#dg').datagrid({
+        'title':'Postgresql集群管理器',   
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'id',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':$(window).height()-35,
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+        'url':'/getnoderows/',
+        'toolbar': '#tb',
+        'onDblClickRow':function(rowIndex, rowData){       
+            $('#cy_update_click').click();
+        }
+    });  
+    
+    //操作员登录
+    $('#login_dialog_login').bind('click', function(){
+        $('#username').textbox({"required":true});  
+        $('#password').passwordbox({"value":$('#password').passwordbox("getValue"),"required":true});
+        $('#login_dialog_form').form('submit', {
+            "url":'./login/', 
+            onSubmit: function(){
+                var validate = $(this).form('validate'); 
+                if ( validate ){
+                    $.messager.progress();    
+                    return true;
+                }
+                return false;
+            },
+            success: function(result){
+                $.messager.progress('close');    
+                var result = eval('('+result+')');  
+                if (result.return_code=="FAIL")                               
+                    {
+                        $.messager.alert('错误提示',result.return_msg, 'error');      
+                    }   
+                else
+                    {
+                        $('#dg').datagrid('reload');
+                        $('#username').textbox({"value":"","required":false});  
+                        $('#password').passwordbox({"value":"","required":false});
+                        $('#login_dialog').dialog('close');
+                    }       
+           }
+        });        
+    });   
+    
+    //增加节点资料
+    $('#cy_insert_click').bind('click', function(){      
+        $('#update_dialog').dialog('open').dialog('center').dialog('setTitle','增加一个节点资料');  
+        $('#update_dialog_form').form('clear'); 
+        $('#update_dialog_form').form('load',{'ssh_port':'22','ssh_user':'postgres','pg_bin':'/usr/local/pgsql/bin/','pg_data':'/home/postgres/data/','pg_port':'5432','pg_database':'template1','pg_user':'postgres'});   
+        url="./insertnode/";
+    }); 
+    
+    //修改节点资料
+    $('#cy_update_click').bind('click', function(){  
+        var row = $('#dg').datagrid('getSelected');      
+        if (row)
+            {                                   
+                $('#update_dialog').dialog('open').dialog('center').dialog('setTitle','修改节点资料');
+                $('#update_dialog_form').form('load',row);  
+                url="./updatenode/";
+            }
+        else
+            {            
+                $.messager.alert('系统提示',"请选择要修改的节点", 'warning');               
+            }    
+    });       
+    
+    //修改节点资料－－保存按钮
+    $('#update_dialog_save').bind('click', function(){
+        $('#update_dialog_form').form('submit', {
+            "url":url, 
+            onSubmit: function(){  
+                var isValid = $(this).form('validate');
+                if (isValid){
+                     $.messager.progress();     
+                     return true;                     
+                }
+                return false;
+            },
+            success: function(result){
+                $.messager.progress('close');       
+                var result = eval('('+result+')');  
+                if (result.return_code=="FAIL")                               
+                    {                           
+                        if ( result.show_login_dialog == 1)
+                            {   
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                        else
+                            {
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                    }   
+                else
+                    {
+                        $.messager.alert('系统提示',result.return_msg, 'info');      
+                        $('#dg').datagrid('reload');
+                        $('#update_dialog').dialog('close');
+                    } 
+           }
+        });         
+    }); 
+    
+    //修改节点资料－－取消按钮
+    $('#update_dialog_cancel').bind('click', function(){
+        $('#update_dialog').dialog('close');
+    });  
+    
+    //删除节点资料
+    $('#cy_delete_click').bind('click', function(){    
+        var row = $('#dg').datagrid('getSelected');    
+        if (!row)
+            {
+                 $.messager.alert('系统提示',"请选择要删除的节点", 'warning'); 
+                 return;
+            }  
+        $.messager.confirm('删除节点记录确认', '你确认要删除这个节点记录（非物理删除节点文件）?', function(r){
+            if (r)
+                {    
+                     $.messager.progress();   
+                     $.ajax({
+                         type:"POST",
+                         url:"/deletenode/",
+                         data:{id:row.id},
+                         success:function(result){
+                             $.messager.progress('close');   
+                             if (result.return_code=="FAIL")                               
+                                 {                       
+                                     if ( result.show_login_dialog == 1)
+                                         {   
+                                             $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                                         }
+                                     else
+                                         {
+                                             $.messager.alert('错误提示',result.return_msg, 'error');   
+                                         }
+                                 }
+                             else
+                                 {
+                                     $.messager.alert('系统提示',result.return_msg, 'info');      
+                                     $('#dg').datagrid('reload');
+                                 }  
+                         },
+                         dataType:"json"
+                     });      
+                }
+        });
+    }); 
+    
+    //节点服务管理
+    $('#cy_serviceadmin_click').bind('click', function(){  
+        var row = $('#dg').datagrid('getSelected');
+        if (row)
+            {                                   
+                $('#serviceadmin_dialog').dialog('open').dialog('center').dialog('setTitle','服务管理');
+                $('#serviceadmin_dialog_form').form('clear');  
+                row.mode = "smart" ;
+                $('#serviceadmin_dialog_form').form('load',row);   
+            }
+        else
+            {            
+                $.messager.alert('系统提示',"请选择要执行服务管理的节点", 'warning');               
+            }    
+    }); 
+    
+    //start服务
+    $('#serviceadmin_dialog_start').bind('click', function(){   
+        serviceadmin("/servicestart/" , "start");         
+    }); 
+    
+    //stop服务
+    $('#serviceadmin_dialog_stop').bind('click', function(){   
+        serviceadmin("/servicestop/" , "stop");       
+    }); 
+    
+    //restart服务
+    $('#serviceadmin_dialog_restart').bind('click', function(){ 
+        serviceadmin("/servicerestart/" , "restart");      
+    }); 
+    
+    //reload服务
+    $('#serviceadmin_dialog_reload').bind('click', function(){ 
+        serviceadmin("/servicereload/" , "reload");      
+    }); 
+    
+    //显示服务status
+    $('#serviceadmin_dialog_status').bind('click', function(){ 
+        serviceadmin("/servicestatus/" , "status");      
+    }); 
+    
+    //执行管理管理操作
+    function serviceadmin(url,act){
+        $('#serviceadmin_dialog_form').form('submit', {
+            "url":url, 
+            onSubmit: function(){ 
+                var isValid = $(this).form('validate');
+                if (isValid){
+                    var run_command = "";
+                    run_command = run_command + $('#pg_bin').textbox('getValue') + "pg_ctl ";
+                    run_command = run_command + act + " -D ";
+                    run_command = run_command + $('#pg_data').textbox('getValue');
+                    if (act == "stop" || act == "restart")
+                        {
+                            run_command = run_command + " -m " + $('#mode').textbox('getValue');      
+                        } 
+                    $('#run_command').textbox('setValue',run_command); 
+                    $.messager.progress();   
+                    return true;
+                }
+                return false;
+            },
+            success: function(result){
+                $.messager.progress('close');  
+                var result = eval('('+result+')');  
+                if (result.return_code=="FAIL")                               
+                    {                           
+                        if ( result.show_login_dialog == 1)
+                            {   
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                        else
+                            {
+                                $.messager.alert('错误提示',result.return_msg, 'error');  
+                                $('#exec_result').textbox('setValue',result.return_msg);  
+                            }
+                    }   
+                else
+                    {                             
+                        $.messager.alert('系统提示',act+"服务完成", 'info');     
+                        $('#exec_result').textbox('setValue',result.return_msg);    
+                        $('#service_status').textbox('setValue',result.service_status);    
+                        $('#service_type').textbox('setValue',result.service_type);    
+                        $('#pg_version').textbox('setValue',result.pg_version);    
+                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
+                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
+                    }       
+           }
+        });       
+    }
+    
+    //服务管理－－取消按钮
+    $('#serviceadmin_dialog_cancel').bind('click', function(){
+        $('#serviceadmin_dialog').dialog('close');
+    });  
+    
+    
+    //节点主备切换管理
+    $('#cy_promote_click').bind('click', function(){  
+        var rows = $('#dg').datagrid('getChecked'); 
+        if (rows.length!=2)
+            {
+                $.messager.alert('系统提示',"请选择要执行主备切换的两个节点", 'warning');    
+                return;   
+            }
+        if ((rows[0].service_type=="主节点" && rows[1].service_type=="主节点") || (rows[0].service_type=="备节点" && rows[1].service_type=="备节点")) 
+            { 
+                $.messager.alert('系统提示',"主备切换需要一主一备两个节点", 'warning');    
+                return;   
+            }
+        if (rows[0].service_status!="运行中"  || rows[0].service_status!="运行中") 
+            { 
+                $.messager.alert('系统提示',"主备切换需要两个节点都处于运行中状态", 'warning');    
+                return;   
+            }
+        for(var i=0; i<rows.length; i++)
+            {
+                 if ( rows[i].service_type=="主节点" )
+                     {
+                          var master_row = rows[i];
+                     }
+                 else
+                     {
+                          var slave_row = rows[i];
+                     }
+            }  
+        //构造recovery.conf文件内容
+        var recovery_conf = "";
+        recovery_conf = "archive_cleanup_command = '" + master_row.pg_bin + "pg_archivecleanup " + master_row.pg_data + "pg_xlog %r'\n";
+        recovery_conf = recovery_conf + "standby_mode = 'on'\n" ;
+        recovery_conf = recovery_conf + "primary_conninfo = 'host=" + slave_row.host + " port=" + slave_row.pg_port + " user=" + slave_row.pg_user + " password=" + slave_row.pg_password + "'\n";
+        recovery_conf = recovery_conf + "recovery_target_timeline = 'latest'";
+        var formrow = {
+            'master_id':master_row.id,
+            'master_node_name':master_row.node_name,
+            'master_service_type':master_row.service_type,
+            'master_service_status':master_row.service_status,
+            'master_pg_version':master_row.pg_version,
+            'master_host':master_row.host,
+            'master_ssh_port':master_row.ssh_port,
+            'master_ssh_user':master_row.ssh_user,
+            'master_ssh_password':master_row.ssh_password,
+            'master_pg_bin':master_row.pg_bin,
+            'master_pg_data':master_row.pg_data,
+            'master_pg_port':master_row.pg_port,
+            'master_pg_database':master_row.pg_database,
+            'master_pg_user':master_row.pg_user, 
+            'master_pg_password':master_row.pg_password, 
+            'master_unbind_vip':master_row.master_vip,
+            'master_unbind_vip_networkcard':master_row.master_vip_networkcard,
+            'master_bind_vip':master_row.slave_vip,
+            'master_bind_vip_networkcard':master_row.slave_vip_networkcard,
+            'master_bind_user':master_row.bind_vip_user,
+            'master_bind_password':master_row.bind_vip_password,
+            'slave_id':slave_row.id,
+            'slave_node_name':slave_row.node_name,
+            'slave_service_type':slave_row.service_type,
+            'slave_service_status':slave_row.service_status,
+            'slave_pg_version':slave_row.pg_version,
+            'slave_host':slave_row.host,
+            'slave_ssh_port':slave_row.ssh_port,
+            'slave_ssh_user':slave_row.ssh_user,
+            'slave_ssh_password':slave_row.ssh_password,
+            'slave_pg_bin':slave_row.pg_bin,
+            'slave_pg_data':slave_row.pg_data,
+            'slave_pg_port':slave_row.pg_port,
+            'slave_pg_database':slave_row.pg_database,
+            'slave_pg_user':slave_row.pg_user, 
+            'slave_pg_password':slave_row.pg_password, 
+            'slave_unbind_vip':slave_row.slave_vip,
+            'slave_unbind_vip_networkcard':slave_row.slave_vip_networkcard,
+            'slave_bind_vip':slave_row.master_vip,
+            'slave_bind_vip_networkcard':slave_row.master_vip_networkcard,
+            'slave_bind_user':slave_row.bind_vip_user,
+            'slave_bind_password':slave_row.bind_vip_password,
+            'recovery_conf':recovery_conf
+        };  
+        $('#promote_dialog').dialog('open').dialog('center').dialog('setTitle','主备切换管理');
+        $('#promote_dialog_form').form('clear');
+        $('#promote_dialog_form').form('load',formrow); 
+        
+        var tt = $('#promote_tabs').tabs('getTab',0);
+        $('#promote_tabs').tabs('update', {'tab':tt, options: {'title': '主节点（'+master_row.node_name+'）'}});
+        var tt = $('#promote_tabs').tabs('getTab',1);   
+        $('#promote_tabs').tabs('update', {'tab':tt, options: {'title': '备节点（'+slave_row.node_name+'）'}});  
+        
+        $('#promote_tabs').tabs('select',2);     
+        $('#master_unbind_vip').textbox({'required':false});
+        $('#master_unbind_vip_networkcard').textbox({'required':false}); 
+        $('#master_bind_vip').textbox({'required':false}); 
+        $('#master_bind_vip_networkcard').textbox({'required':false}); 
+        $('#master_bind_user').textbox({'required':false}); 
+        $('#master_bind_password').passwordbox({'value':$('#master_bind_password').passwordbox('getValue'),'required':false}); 
+        
+        $('#slave_unbind_vip').textbox({'required':false});
+        $('#slave_unbind_vip_networkcard').textbox({'required':false}); 
+        $('#slave_bind_vip').textbox({'required':false}); 
+        $('#slave_bind_vip_networkcard').textbox({'required':false}); 
+        $('#slave_bind_user').textbox({'required':false}); 
+        $('#slave_bind_password').passwordbox({'value':$('#slave_bind_password').passwordbox('getValue'),'required':false}); 
+        
+        $('#promote_dialog_ip_refresh').click(); 
+        
+    }); 
+    
+    //主务切换管理--刷新ip绑定详情
+    $('#promote_dialog_ip_refresh').bind('click',function(){
+        //$.messager.progress();   
+        $('#promote_dialog_ip_refresh').linkbutton("disable");
+        $('#master_ip_status').textbox('setValue',"数据加载中...");
+        $('#slave_ip_status').textbox('setValue',"数据加载中...");  
+        $.ajax({        
+                type:"POST",
+                url:"/promote_get_ip_bind_status/",
+                data:{'master_id':$('#promote_master_id').textbox('getValue'),'slave_id':$('#promote_slave_id').textbox('getValue')},
+                success:function(result){
+                    //$.messager.progress('close');   
+                    $('#promote_dialog_ip_refresh').linkbutton("enable");        
+                    if (result.return_code=="FAIL")                               
+                        {                       
+                            if ( result.show_login_dialog == 1)
+                                {   
+                                    $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                                    //$('#promote_dialog').dialog('close');
+                                }
+                            else
+                                {
+                                    $.messager.alert('错误提示',result.return_msg, 'error');   
+                                }
+                        }
+                    else
+                        {
+                            $('#master_ip_status').textbox('setValue',result.master_ip_status);
+                            $('#slave_ip_status').textbox('setValue',result.slave_ip_status);  
+                        }  
+                },
+                dataType:"json"
+            });      
+    });
+    
+    //主备切换管理－－一键切换
+    $('#promote_dialog_start').bind('click',function(){
+         $.messager.confirm('主备切换确认','你确认要执行主备切换操作吗', function(r){
+             if (r)  
+                 {
+                     //提交表单
+                     promote_dialog_form();
+                 }
+         }); 
+    });       
+    
+    //提交主备切换表单
+    function promote_dialog_form(){
+        $('#promote_dialog_form').form('submit', {
+            "url":'/promote/',
+            onSubmit: function(){
+                $('#promote_tabs').tabs('select',2);  
+                var master_unbind_vip = $('#master_unbind_vip').textbox('getValue');
+                if (master_unbind_vip!=""){
+                     $('#master_unbind_vip_networkcard').textbox({'required':true});
+                }else{
+                     $('#master_unbind_vip_networkcard').textbox({'required':false});
+                }   
+                var master_bind_vip = $('#master_bind_vip').textbox('getValue');
+                if (master_bind_vip!=""){
+                     $('#master_bind_vip_networkcard').textbox({'required':true});
+                }else{
+                     $('#master_bind_vip_networkcard').textbox({'required':false});
+                }   
+                if (master_unbind_vip!="" || master_bind_vip!=""){
+                     $('#master_bind_user').textbox({'required':true});    
+                     $('#master_bind_password').passwordbox({'value':$('#master_bind_password').passwordbox('getValue'),'required':true});    
+                }else{
+                     $('#master_bind_user').textbox({'required':false});    
+                     $('#master_bind_password').passwordbox({'required':false});   
+                }
+                
+                var slave_unbind_vip = $('#slave_unbind_vip').textbox('getValue');
+                if (slave_unbind_vip!=""){
+                     $('#slave_unbind_vip_networkcard').textbox({'required':true});
+                }else{
+                     $('#slave_unbind_vip_networkcard').textbox({'required':false});
+                }   
+                var slave_bind_vip = $('#slave_bind_vip').textbox('getValue');
+                if (slave_bind_vip!=""){
+                     $('#slave_bind_vip_networkcard').textbox({'required':true});
+                }else{
+                     $('#slave_bind_vip_networkcard').textbox({'required':false});
+                }   
+                if (slave_unbind_vip!="" || slave_bind_vip!=""){
+                     $('#slave_bind_user').textbox({'required':true});    
+                     $('#slave_bind_password').passwordbox({'value':$('#slave_bind_password').passwordbox('getValue'),'required':true});    
+                }else{
+                     $('#slave_bind_user').textbox({'required':false});    
+                     $('#slave_bind_password').passwordbox({'required':false});    
+                }
+                
+                var isValid = $(this).form('validate');     
+                if (isValid){                    
+                    $.messager.progress();     
+                    return true;
+                } 
+                return false;
+            },
+            success: function(result){
+                $.messager.progress('close');  
+                var result = eval('('+result+')');  
+                if (result.return_code=="FAIL")                               
+                    {                           
+                        if ( result.show_login_dialog == 1)
+                            {   
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                        else
+                            {
+                                $.messager.alert('错误提示',result.return_msg, 'error');  
+                                $('#promote_exec_result').textbox('setValue',result.return_msg); 
+                            }
+                    }   
+                else
+                    {   
+                        $.messager.alert('系统提示',"主备切换成功", 'info'); 
+                        $('#dg').datagrid('reload');   
+                        $('#promote_dialog').dialog('close');           
+                        
+                    }       
+            }
+        });
+    }       
+    
+    //主备切换管理－－取消按钮
+    $('#promote_dialog_cancel').bind('click', function(){
+        $('#promote_dialog').dialog('close');     
+    });   
+    
+    
+    //操作员修改登录密码
+    $('#cy_password_click').bind('click', function(){      
+        $('#password_update_dialog').dialog('open').dialog('center').dialog('setTitle','修改登录密码');  
+        $('#password_update_dialog_form').form('clear'); 
+    }); 
+    
+    //操作员修改密码
+    $('#password_update').bind('click', function(){
+        $('#old_password').passwordbox({"value":$('#old_password').passwordbox("getValue"),"required":true});  
+        $('#new_password').passwordbox({"value":$('#new_password').passwordbox("getValue"),"required":true});
+        $('#new_password_confirm').passwordbox({"value":$('#new_password_confirm').passwordbox("getValue"),"required":true});
+        $('#password_update_dialog_form').form('submit', {
+            "url":'./password_update/', 
+            onSubmit: function(){
+                var validate = $(this).form('validate'); 
+                if ( validate ){
+                    $.messager.progress();    
+                    return true;
+                }
+                return false;
+            },
+            success: function(result){
+                $.messager.progress('close');    
+                var result = eval('('+result+')');  
+                if (result.return_code=="FAIL")                               
+                    {
+                        if ( result.show_login_dialog == 1)
+                            {   
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                        else
+                            {
+                                $.messager.alert('错误提示',result.return_msg, 'error');            
+                            }
+                        
+                    }   
+                else
+                    {   
+                        $.messager.alert('系统提示',result.return_msg, 'info');        
+                        $('#old_password').passwordbox({"value":"","required":false});            
+                        $('#new_password').passwordbox({"value":"","required":false});
+                        $('#new_password_confirm').passwordbox({"value":"","required":false});              
+                        $('#password_update_dialog').dialog('close');
+                    }       
+           }
+        });        
+    });   
+    
+    //退出
+    $('#cy_exit_click').bind('click', function(){  
+        $.messager.confirm('退出确认','你确认要退出登录状态吗?', function(r){
+            if (r)
+                {    
+                     $.messager.progress();   
+                     $.ajax({
+                         type:"POST",
+                         url:"/exit/",
+                         success:function(result){
+                             $.messager.progress('close');   
+                             if (result.return_code=="FAIL")                               
+                                 {                       
+                                     $.messager.alert('错误提示',result.return_msg, 'error');   
+                                 }
+                             else
+                                 {
+                                     //$.messager.alert('系统提示',result.return_msg, 'info');   
+                                     $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','你已经安全退出，想操作请重新登录');     
+                                 }  
+                         },
+                         dataType:"json"
+                     });      
+                }
+        });
+    }); 
+    
+    //检查操作员是否登录
+    $.ajax({
+        url:"/logincheck/",
+        success:function(result){
+            if (result.return_code=="FAIL")                               
+                {                       
+                    $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','操作员登录');   
+                } 
+        },
+        dataType:"json"
+    });  
+    
+     
+});
+
+
+function closes(){  
+    $("#Loading").fadeOut("normal",function(){
+        $(this).remove();        
+    });     
+}      
+var pc;   
+$.parser.onComplete = function(){ 
+    if(pc) clearTimeout(pc);    
+    pc = setTimeout(closes, 500);
+} 
+
+
+</script>
+</body>
+</html>
