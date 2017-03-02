@@ -59,7 +59,7 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 
 配置完成后需要重启服务,其它参数视需要自己配置
 
-建立pgclusteradmin库并导入建立应相资料表
+建立pgclusteradmin库并导入建立资料表
 
     /usr/local/pgsql9.6.1/bin/psql -h 192.168.1.10 -U postgres -d postgres -p 5432 
     postgres=# create database pgcluster ENCODING 'utf8' template template0;
