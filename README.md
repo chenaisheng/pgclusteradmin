@@ -159,6 +159,7 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     [root@ad ~]# cd /usr/lib/golang/src
     [root@ad src]# mkdir golang.org
     [root@ad src]# cd golang.org/
+    [root@ad golang.org]# mkdir x
     [root@ad src]# cd x/
     [root@ad x]# git clone https://github.com/golang/crypto.git
     正克隆到 'crypto'...
