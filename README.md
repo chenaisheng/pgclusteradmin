@@ -237,6 +237,6 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     
 ####2017-3-3号
 
-*1、修改 "promote_get_ip_bind_statusHandler" 接口（获取主备节点ip绑定情况接口），变成异步同时获取主备节点的ip绑定详情，提高程序的响应速度
-*2、修改 "insertnodeHandler" 接口（增加节点资料），提前执行rows.Close() 的错误
-*3、修改 "insertnodeHandler"和"updatenodeHandler" 接口（修改节点资料），限制host+pg_port不能重复
+* 1、修改 "promote_get_ip_bind_statusHandler" 接口（获取主备节点ip绑定情况接口），变成异步同时获取主备节点的ip绑定详情，提高程序的响应速度
+* 2、修改 "insertnodeHandler" 接口（增加节点资料），提前执行rows.Close() 的错误
+* 3、修改 "insertnodeHandler"和"updatenodeHandler" 接口（修改节点资料），限制host+pg_port不能重复
