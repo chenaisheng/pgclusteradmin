@@ -220,9 +220,19 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 打开一个浏览器，输入 http://192.168.1.10:10001即可进入管理器，192.168.1.10换成你自己ip地址即可。
 
 ###五、界面图 
-    
+
+####主界面说明    
 ![](https://github.com/chenaisheng/pgclusteradmin/blob/master/gui_image/%E4%B8%BB%E7%95%8C%E9%9D%A2%E8%AF%B4%E6%98%8E.png)
+
+####添加节点
+![](https://github.com/chenaisheng/pgclusteradmin/blob/master/gui_image/%E6%B7%BB%E5%8A%A0%E8%8A%82%E7%82%B9.png)
+
+服务管理
+![](https://github.com/chenaisheng/pgclusteradmin/blob/master/gui_image/%E6%9C%8D%E5%8A%A1%E7%AE%A1%E7%90%86.png)
+
+主备切换
+![](https://github.com/chenaisheng/pgclusteradmin/blob/master/gui_image/%E4%B8%BB%E5%A4%87%E5%88%87%E6%8D%A2.png)
     
 ###六、更新日志
     
-    2017-3-3号修改"promote_get_ip_bind_statusHandler"获取主备节点ip绑定情况接口，修改成异步同时获取，提高程序的响应速度
+    2017-3-3号－－修改 "promote_get_ip_bind_statusHandler" 接口（获取主备节点ip绑定情况接口），变成异步同时获取主备节点的ip绑定详情，提高程序的响应速度
