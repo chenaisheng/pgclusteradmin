@@ -221,7 +221,7 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 
 ###五、界面图 
     
-https://github.com/chenaisheng/pgclusteradmin/blob/master/gui_image/%E4%B8%BB%E7%95%8C%E9%9D%A2%E8%AF%B4%E6%98%8E.png
+![](https://github.com/chenaisheng/pgclusteradmin/blob/master/gui_image/%E4%B8%BB%E7%95%8C%E9%9D%A2%E8%AF%B4%E6%98%8E.png)
     
 ###六、更新日志
     
