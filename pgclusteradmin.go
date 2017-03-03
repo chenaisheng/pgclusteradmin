@@ -57,6 +57,13 @@ type Data struct {
     Rows []Row `json:"rows"`
 }
 
+//ssh执行命令结果返回
+
+type Stdout_and_stderr struct{ 
+    Stdout string  `json:"stdout"`    
+    Stderr string  `json:"stderr"` 
+}
+
 
 //SESSION在init函数中初始化
 func init() {
@@ -1487,23 +1494,16 @@ func promote_get_ip_bind_statusHandler  (w http.ResponseWriter, r *http.Request)
         return
     }   
     
-    //获取主节点ip绑定情况 
+    //判断主节点master_id合法性
     master_id,err := strconv.Atoi(r.FormValue("master_id")) 
     if err != nil {
         error_msg = "主节点id号不是合法的int类型，id号为 [ " + r.FormValue("master_id") + " ]" 
         OutputJson(w,"FAIL",error_msg,0)   
         go write_log(remote_ip,modlename,username,"Error",error_msg) 
         return
-    }   
-    master_ip_status,stderr := get_node_ip_bind_status(master_id)
-    if stderr != "" {
-        error_msg =  "获取主节点ip绑定情况失败，详情："+stderr 
-        OutputJson(w,"FAIL",error_msg,0)   
-        go write_log(remote_ip,modlename,username,"Error",error_msg) 
-        return 
-    }     
-    
-    //获取备节点ip绑定情况   
+    } 
+          
+    //判断备节点slave_id合法性   
     slave_id,err := strconv.Atoi(r.FormValue("slave_id")) 
     if err != nil {
         error_msg =  "备节点id号不是合法的int类型，id号为 [ " + r.FormValue("slave_id") + " ]" 
@@ -1511,12 +1511,35 @@ func promote_get_ip_bind_statusHandler  (w http.ResponseWriter, r *http.Request)
         go write_log(remote_ip,modlename,username,"Error",error_msg) 
         return
     }  
-    slave_ip_status,stderr := get_node_ip_bind_status(slave_id)
-    if stderr != "" {
-        error_msg = "获取备节点ip绑定情况失败，详情："+stderr
+    
+    //异步获取主节点ip绑定情况
+    master_ip_status_chan:= make(chan []byte) 
+    go get_node_ip_bind_status(master_id,master_ip_status_chan)    
+    
+    //异步获取备节点ip绑定情况
+    slave_ip_status_chan:= make(chan []byte)   
+    go get_node_ip_bind_status(slave_id,slave_ip_status_chan)
+    
+    //获取访问主节点异常执行返回ip绑定结果
+    master_ip_status := <- master_ip_status_chan
+    var master_ret Stdout_and_stderr
+    json.Unmarshal(master_ip_status,&master_ret)
+    if master_ret.Stderr !="" {
+        error_msg =  "获取主节点ip绑定情况失败，详情：" + master_ret.Stderr
         OutputJson(w,"FAIL",error_msg,0)   
         go write_log(remote_ip,modlename,username,"Error",error_msg) 
-        return
+        return 
+    }     
+    
+    //获取访问主节点异常执行返回ip绑定结果
+    slave_ip_status := <- slave_ip_status_chan
+    var slave_ret Stdout_and_stderr
+    json.Unmarshal(slave_ip_status,&slave_ret)
+    if slave_ret.Stderr !="" {
+        error_msg =  "获取备节点ip绑定情况失败，详情：" + slave_ret.Stderr
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return 
     }
     
     //定义返回的结构体
@@ -1528,7 +1551,7 @@ func promote_get_ip_bind_statusHandler  (w http.ResponseWriter, r *http.Request)
         Slave_ip_status string `json:"slave_ip_status"`
     }
     
-    out := &Ret{"SUCCESS", "获取成功", 0, master_ip_status, slave_ip_status}
+    out := &Ret{"SUCCESS", "获取成功", 0, master_ret.Stdout, slave_ret.Stdout}
     b, _ := json.Marshal(out)
     w.Write(b)  
 }
@@ -1540,17 +1563,21 @@ func promote_get_ip_bind_statusHandler  (w http.ResponseWriter, r *http.Request)
 nodeid   -- 节点的id号
 
 返回值说明：
-return_ip_status -- 返回的ip绑定信息
-return_err       -- 获取出错信息，不为空字符串即出错
+s -- 通道返回一个结构体的序列化数据
 */
 
-func get_node_ip_bind_status(nodeid int) (return_ip_status string,return_err string) {
-    //连接db    
+func get_node_ip_bind_status(nodeid int,s chan []byte){
+    //定义返回的struct
+    out := new(Stdout_and_stderr)
+    //连接db          
     var conn *pgx.Conn
     conn, err := pgx.Connect(extractConfig())    
     if err != nil {
-        return "",err.Error()
-        
+        out.Stdout = ""
+        out.Stderr = err.Error()
+        b, _ := json.Marshal(out)   
+        s <-  b
+        return 
     }  
     //随后关闭连接
     defer conn.Close()  
@@ -1559,7 +1586,10 @@ func get_node_ip_bind_status(nodeid int) (return_ip_status string,return_err str
     sql := "SELECT host,ssh_port,ssh_user,ssh_password FROM nodes WHERE id = $1 " 
     rows, err := conn.Query(sql,nodeid) 
     if err != nil {
-        return "",err.Error()   
+        out.Stdout = ""
+        out.Stderr = err.Error()
+        b, _ := json.Marshal(out)   
+        s <-  b    
         return
     }
     defer rows.Close()    
@@ -1568,16 +1598,28 @@ func get_node_ip_bind_status(nodeid int) (return_ip_status string,return_err str
     if rows.Next() {  
         err = rows.Scan( &row.Host , &row.Ssh_port , &row.Ssh_user , &row.Ssh_password )
         if err != nil {
-            return "",err.Error()  
+            out.Stdout = ""
+            out.Stderr = err.Error()
+            b, _ := json.Marshal(out)   
+            s <-  b   
+            return 
         }   
     } else {
-        return "","节点不存在"   
+        out.Stdout = ""
+        out.Stderr = "节点不存在"
+        b, _ := json.Marshal(out)   
+        s <-  b   
+        return  
     }  
     
     //获取ip绑定情况
     cmd := "ip a"
-    stdout,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)         
-    return stdout,stderr
+    stdout,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)  
+    out.Stdout = stdout
+    out.Stderr = stderr 
+    b, _ := json.Marshal(out)
+    s <-  b        
+    return
 }      
 
 //生成返回json数据
