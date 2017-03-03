@@ -542,7 +542,7 @@ func insertnodeHandler(w http.ResponseWriter, r *http.Request){
     } 
     defer conn.Close()          
     
-    //检查节点是否已经存在
+    //检查节点是否已经存在,node_name不能相同
     sql := " SELECT id FROM nodes WHERE node_name = $1 "
     rows, err := conn.Query(sql,r.FormValue("node_name")) 
     if err != nil {
@@ -551,12 +551,29 @@ func insertnodeHandler(w http.ResponseWriter, r *http.Request){
         go write_log(remote_ip,modlename,username,"Error",error_msg)            
         return 
     }
-    rows.Close() 
     
     if rows.Next() {
         OutputJson(w,"FAIL","节点名称已经被使用",0)   
         return
     } 
+    rows.Close() 
+    
+    
+    //检查节点是否已经存在,host + pg_port 不能相同
+    sql = " SELECT id FROM nodes WHERE host = $1 AND pg_port = $2 "
+    rows, err = conn.Query(sql,r.FormValue("host"),r.FormValue("pg_port")) 
+    if err != nil {
+        error_msg =  "执行查询失败，详情：" + err.Error()
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)            
+        return 
+    }
+    
+    if rows.Next() {
+        OutputJson(w,"FAIL","主机名+数据库端口号已经存在",0)   
+        return
+    }
+    rows.Close()  
     
     sql = `
     INSERT INTO nodes
@@ -682,13 +699,27 @@ func updatenodeHandler(w http.ResponseWriter, r *http.Request){
         OutputJson(w,"FAIL",error_msg,0)              
         go write_log(remote_ip,modlename,username,"Error",error_msg)       
         return 
-    }
-    defer rows.Close() 
-    
+    }   
     if rows.Next() {
         OutputJson(w,"FAIL","节点名称已经被使用",0)   
         return
     } 
+    rows.Close()  
+    
+    //检查节点是否已经存在,host + pg_port 不能相同    
+    sql = " SELECT id FROM nodes WHERE host = $1 AND pg_port = $2 AND id != $3 "
+    rows, err = conn.Query(sql,r.FormValue("host"),r.FormValue("pg_port"),r.FormValue("id")) 
+    if err != nil {
+        error_msg =  "执行查询失败，详情：" + err.Error()
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)       
+        return 
+    }   
+    if rows.Next() {
+        OutputJson(w,"FAIL","主机名+数据库端口号已经存在",0) 
+        return
+    } 
+    rows.Close()  
     
     sql = `
     UPDATE 
