@@ -1644,7 +1644,7 @@ func get_node_ip_bind_status(nodeid int,s chan []byte){
     }  
     
     //获取ip绑定情况
-    cmd := "ip a"
+    cmd := "ippath=`which 'ip'`;$ippath a"
     stdout,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)  
     out.Stdout = stdout
     out.Stderr = stderr 
