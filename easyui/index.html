@@ -601,8 +601,10 @@ $(document).ready(function()
                                  }
                              else
                                  {
-                                     $.messager.alert('系统提示',result.return_msg, 'info');      
-                                     $('#dg').datagrid('reload');
+                                     $.messager.alert('系统提示',result.return_msg, 'info');   
+                                     var row = $('#dg').datagrid('getSelected');  
+                                     var index = $('#dg').datagrid('getRowIndex',row);      
+                                     $('#dg').datagrid('deleteRow',index);
                                  }  
                          },
                          dataType:"json"
@@ -716,7 +718,7 @@ $(document).ready(function()
                 $.messager.alert('系统提示',"请选择要执行主备切换的两个节点", 'warning');    
                 return;   
             }
-        if ((rows[0].service_type=="主节点" && rows[1].service_type=="主节点") || (rows[0].service_type=="备节点" && rows[1].service_type=="备节点")) 
+        if ((rows[0].service_type=="主节点" && rows[1].service_type=="主节点") || (rows[0].service_type=="备节点" && rows[1].service_type=="备节点") || (rows[0].service_type=="普通节点" || rows[1].service_type=="普通节点")) 
             { 
                 $.messager.alert('系统提示',"主备切换需要一主一备两个节点", 'warning');    
                 return;   
