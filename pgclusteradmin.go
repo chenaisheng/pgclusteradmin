@@ -1197,7 +1197,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     //如果主节点需要解绑vip，则需要做一些检查工作
     if r.FormValue("master_unbind_vip")!="" {
         //判断解绑vip是否存在
-        cmd := "ip a |grep '" + r.FormValue("master_unbind_vip") + "'|grep '" + r.FormValue("master_unbind_vip_networkcard") + "'" 
+        cmd := "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("master_unbind_vip") + "'|grep '" + r.FormValue("master_unbind_vip_networkcard") + "'" 
         stdout,stderr := ssh_run(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port,cmd)  
         if stderr != "" {
             error_msg = "主节点切为备节点，检查要解绑的VIP[" + r.FormValue("master_unbind_vip") + "]出错，详情：" + stderr
@@ -1216,7 +1216,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     //如果备节点需要解绑vip，则需要做一些检查工作
     if r.FormValue("slave_unbind_vip")!="" {
         //判断解绑vip是否存在
-        cmd := "ip a |grep '" + r.FormValue("slave_unbind_vip") + "'|grep '" + r.FormValue("slave_unbind_vip_networkcard") + "'" 
+        cmd := "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("slave_unbind_vip") + "'|grep '" + r.FormValue("slave_unbind_vip_networkcard") + "'" 
         stdout,stderr := ssh_run(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port,cmd)  
         if stderr != "" {
             error_msg = "备节点切为主节点，检查要解绑的VIP[" + r.FormValue("slave_unbind_vip") + "]出错，详情：" + stderr
@@ -1282,7 +1282,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     //切换前主节点解绑vip
     if r.FormValue("master_unbind_vip")!="" {
         //判断解绑vip是否存在
-        cmd := "ip addr del '" + r.FormValue("master_unbind_vip") + "/24' dev '" + r.FormValue("master_unbind_vip_networkcard") + "'" 
+        cmd := "cmdpath=`which 'ip'`;$cmdpath addr del '" + r.FormValue("master_unbind_vip") + "/24' dev '" + r.FormValue("master_unbind_vip_networkcard") + "'" 
         _,stderr := ssh_run(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port,cmd)  
         if stderr != "" {
             error_msg = "主节点切为备节点，切换前执行解绑vip出错，详情：" + stderr
@@ -1295,7 +1295,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     //切换前备节点解绑vip
     if r.FormValue("slave_unbind_vip")!="" {
         //判断解绑vip是否存在
-        cmd := "ip addr del '" + r.FormValue("slave_unbind_vip") + "/24' dev '" + r.FormValue("slave_unbind_vip_networkcard") + "'" 
+        cmd := "cmdpath=`which 'ip'`;$cmdpath addr del '" + r.FormValue("slave_unbind_vip") + "/24' dev '" + r.FormValue("slave_unbind_vip_networkcard") + "'" 
         _,stderr := ssh_run(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port,cmd)  
         if stderr != "" {
             error_msg = "备节点切为主节点，切换前执行解绑vip出错，详情：" + stderr
@@ -1361,13 +1361,13 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
         return  
     }  
     
-    //切换后原来的主节点（现在变成备节点了）需要绑定vip
+    //切换后原来的主节点（现在变成备节点了）需要绑定vip        
     if r.FormValue("master_bind_vip")!="" {
         //判断解绑vip是否存在
-        cmd := "ifconfig '" + r.FormValue("master_bind_vip_networkcard") + "' '" + r.FormValue("master_bind_vip") + "'" 
+        cmd := "cmdpath=`which 'ifconfig'`;$cmdpath '" + r.FormValue("master_bind_vip_networkcard") + "' '" + r.FormValue("master_bind_vip") + "'" 
         _,stderr := ssh_run(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port,cmd)  
         if stderr != "" {
-            error_msg = "切换成功，但主节点切为备节点后扫行绑定vip出错，详情：" + stderr
+            error_msg = "切换成功，但主节点切为备节点后绑定vip出错，详情：" + stderr
             OutputJson(w,"SUCCESS",error_msg,0)              
             go write_log(remote_ip,modlename,username,"Error",error_msg)        
             return  
@@ -1377,10 +1377,10 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     //切换后原来的备节点（现在变成主节点了）需要绑定vip
     if r.FormValue("slave_bind_vip")!="" {
         //判断解绑vip是否存在
-        cmd := "ifconfig '" + r.FormValue("slave_bind_vip_networkcard") + "' '" + r.FormValue("slave_bind_vip") + "'" 
+        cmd := "cmdpath=`which 'ifconfig'`;$cmdpath '" + r.FormValue("slave_bind_vip_networkcard") + "' '" + r.FormValue("slave_bind_vip") + "'" 
         _,stderr := ssh_run(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port,cmd)  
         if stderr != "" {
-            error_msg = "切换成功，但备节点切为主节点后扫行绑定vip出错，详情：" + stderr
+            error_msg = "切换成功，但备节点切为主节点后绑定vip出错，详情：" + stderr
             OutputJson(w,"SUCCESS",error_msg,0)              
             go write_log(remote_ip,modlename,username,"Error",error_msg)        
             return 
@@ -1644,7 +1644,7 @@ func get_node_ip_bind_status(nodeid int,s chan []byte){
     }  
     
     //获取ip绑定情况
-    cmd := "ippath=`which 'ip'`;$ippath a"
+    cmd := "cmdpath=`which 'ip'`;$cmdpath a"
     stdout,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)  
     out.Stdout = stdout
     out.Stderr = stderr 
@@ -1732,7 +1732,7 @@ func write_log(remote_ip string, modlename string , username string , log_level 
     fmt.Println("模块名称：", modlename )  
     fmt.Println("操作用户：", username ) 
     fmt.Println("日志级别：", log_level ) 
-    fmt.Println("错误信息：", error_msg )   
+    fmt.Println("详细信息：", error_msg )   
     //连接db，保存日志    
     var conn *pgx.Conn
     conn, err := pgx.Connect(extractConfig())

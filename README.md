@@ -243,3 +243,9 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 * 4、修正 index.html中前端删除节点资料后,在没刷新的情况下无法执行主备切换功能
 * 5、修正 index.html中前端主备切换判断主备节点类型不正确的bug
 * 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误
+
+####2017-3-4号
+
+* 1、修正 项目中所有找不到ip命令和ifconfig命令的错误
+
+
