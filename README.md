@@ -250,6 +250,6 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 
 ####2017-3-7号
 
-* 1、修改"promoteHandler"接口,由原来的顺序执行修改为多次异步执行
+* 1、修改"promoteHandler"接口,由原来的顺序执行修改为多次异步执行,使执行的速度提高一陪
 
 
