@@ -65,7 +65,7 @@
 </div>
 
 <!--修改资料窗口-->
-<div id="update_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#update_dialog_buttons',closed:true,width:680,height:518,closable:true"> <!--modal是遮罩层--> 
+<div id="update_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#update_dialog_buttons',closed:true,width:680,height:528,closable:true"> <!--modal是遮罩层--> 
  <div style="padding:30px 5px 5px 10px">      
    <form id="update_dialog_form" method="post"> 
        <table cellpadding="3" width="99%">
@@ -183,7 +183,7 @@
           </tr> 
           <tr>
             <td align="center" width="120">关闭模式</td>
-            <td colspan="3"><select class="easyui-combobox" name="mode" id="mode" data-options="editable:false,panelHeight:'auto',width:492,valueField: 'value',textField: 'label',data: [{label: 'smart',value: 'smart',selected:true},{label: 'fast',value: 'fast'},{label: 'immediate',value: 'immediate'}]" required="true"></select></td> 
+            <td colspan="3"><select class="easyui-combobox" name="mode" id="mode" data-options="editable:false,panelHeight:'auto',width:492,valueField: 'value',textField: 'label',data: [{label: 'smart',value: 'smart'},{label: 'fast',value: 'fast',selected:true},{label: 'immediate',value: 'immediate'}]" required="true"></select></td> 
           </tr> 
           <tr>
             <td align="center" width="120">执行命令</td>
@@ -578,7 +578,7 @@ $(document).ready(function()
                  $.messager.alert('系统提示',"请选择要删除的节点", 'warning'); 
                  return;
             }  
-        $.messager.confirm('删除节点记录确认', '你确认要删除这个节点记录（非物理删除节点文件）?', function(r){
+        $.messager.confirm('删除节点记录确认', '你确认要删除这个节点<font color=red>[ ' + row.node_name + ' ]</font>记录（非物理删除节点文件）?', function(r){
             if (r)
                 {    
                      $.messager.progress();   
@@ -620,7 +620,7 @@ $(document).ready(function()
             {                                   
                 $('#serviceadmin_dialog').dialog('open').dialog('center').dialog('setTitle','服务管理');
                 $('#serviceadmin_dialog_form').form('clear');  
-                row.mode = "smart" ;
+                row.mode = "fast" ;
                 $('#serviceadmin_dialog_form').form('load',row);   
             }
         else

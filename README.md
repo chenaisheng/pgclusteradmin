@@ -248,4 +248,8 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 
 * 1、修正 项目中所有找不到ip命令和ifconfig命令的错误
 
+####2017-3-7号
+
+* 1、修改"promoteHandler"接口,由原来的顺序执行修改为多次异步执行
+
 
