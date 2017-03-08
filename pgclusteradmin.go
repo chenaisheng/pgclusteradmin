@@ -25,6 +25,7 @@ type Result struct{
     
 //节点行信息json结构
 type Row struct {
+    Json_id int `json:"json_id"`
     Id int `json:"id"`
     Node_name string `json:"node_name"`    
     Createtime string `json:"createtime"`    
@@ -378,8 +379,8 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request){
     
     var data Data = Data{}
     data.Rows = make([]Row,0)
-    data.Total= 0  
-    
+    data.Total= 0      
+    end := make(chan *Row) 
     for rows.Next() {             
         var row Row 
         err = rows.Scan(
@@ -401,10 +402,17 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request){
             return  
         }
         //获取节点的类型和目前服务状态，主节点还是备节点。
-        getnode_type_and_status(&row) 
+        row.Json_id = data.Total
         data.Rows = append(data.Rows,row)
+        go getnode_type_and_status(end,&data.Rows[data.Total]) 
         data.Total = data.Total + 1
     }    
+    for i:=0; i < data.Total ; i++ {
+        t := <-end
+        data.Rows[t.Json_id].Service_type=t.Service_type
+        data.Rows[t.Json_id].Service_status=t.Service_status
+        data.Rows[t.Json_id].Pg_version=t.Pg_version
+    }
     ret, _ := json.Marshal(data)
     w.Write(ret)     
 }  
@@ -420,7 +428,7 @@ row -- *Row指针
 返回值说明： 无
 */
 
-func getnode_type_and_status (row *Row) {  
+func getnode_type_and_status (end chan *Row,row *Row) {  
     //初始化
     row.Service_status = "" 
     row.Service_type = ""   
@@ -444,6 +452,7 @@ func getnode_type_and_status (row *Row) {
         if err != nil {
             row.Service_type = "获取节点类型出错"   
             row.Pg_version = "获取版本号出错" + err.Error() 
+            end <- row
             return
         }     
         defer rows.Close()  
@@ -454,10 +463,13 @@ func getnode_type_and_status (row *Row) {
             if err != nil {  
                 row.Service_type = "获取节点类型出错"  
                 row.Pg_version = "获取版本号出错" + err.Error()  
+                end <- row
                 return
             }
             row.Service_type = service_type
             row.Pg_version = pg_version
+            end <- row
+            return
         }         
     } else {
         row.Service_status="服务停止"  
@@ -466,6 +478,7 @@ func getnode_type_and_status (row *Row) {
         stdout,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)  
         if stderr != "" {
             row.Service_status="无法获得节点状态，详情" + stderr
+            end <- row   
             return
         }
         if strings.Contains(stdout, "minimal") || strings.Contains(stdout, "archive") {
@@ -494,6 +507,7 @@ func getnode_type_and_status (row *Row) {
         //获取pg的版本号
         lines := strings.Split(stdout, "\n")
         row.Pg_version = lines[0]   
+        end <- row   
     }        
 }  
 
@@ -1012,7 +1026,9 @@ func serviceadminHandler  (w http.ResponseWriter, r *http.Request,act string){
                 time.Sleep(1 * time.Second) 
             }
             //重新获取节点的状态
-            getnode_type_and_status(&row)
+            end := make(chan *Row)    
+            go getnode_type_and_status(end,&row)
+            t := <-end
             error_msg = "执行 [ " + act + " ] 成功，node_id为 [ " + r.FormValue("id") + " ]"
             
             //操作服务(启动，重启和关闭)结果信息json结构
@@ -1024,7 +1040,7 @@ func serviceadminHandler  (w http.ResponseWriter, r *http.Request,act string){
                 Service_status string `json:"service_status"`   
                 Pg_version string `json:"pg_version"`   
             }
-            out := &Result_serviceadmin{"SUCCESS", stdout, 0, row.Service_type, row.Service_status, row.Pg_version}
+            out := &Result_serviceadmin{"SUCCESS", stdout, 0, t.Service_type, t.Service_status, t.Pg_version}
             b, _ := json.Marshal(out)
             w.Write(b)   
             go write_log(remote_ip,modlename,username,"Log",error_msg)       
