@@ -1217,7 +1217,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
          
     
     //如果主节点需要解绑vip，则需要做一些检查工作
-    master_unbind_vip_chan := make(chan []byte)  
+    master_unbind_vip_chan := make(chan Stdout_and_stderr)  
     if r.FormValue("master_unbind_vip")!="" {
         //判断解绑vip是否存在
         cmd := "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("master_unbind_vip") + "'|grep '" + r.FormValue("master_unbind_vip_networkcard") + "'"   
@@ -1225,7 +1225,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     }
     
     //如果备节点需要解绑vip，则需要做一些检查工作
-    slave_unbind_vip_chan := make(chan []byte)   
+    slave_unbind_vip_chan := make(chan Stdout_and_stderr)   
     if r.FormValue("slave_unbind_vip")!="" {
         //判断解绑vip是否存在
         cmd := "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("slave_unbind_vip") + "'|grep '" + r.FormValue("slave_unbind_vip_networkcard") + "'" 
@@ -1233,14 +1233,14 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     } 
     
     //如果主节点需要绑定vip,并且要绑定的vip不是备节点要解绑的Vip，则需要做一些检查工作
-    master_bind_vip_chan := make(chan []byte)
+    master_bind_vip_chan := make(chan Stdout_and_stderr)
     if r.FormValue("master_bind_vip")!="" && r.FormValue("master_bind_vip") != r.FormValue("slave_unbind_vip") {
         cmd := "ping " + r.FormValue("master_bind_vip") + " -c 3 | grep 'ttl'"         
         go ssh_run_chan(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port,cmd,master_bind_vip_chan)  
     }
     
     //如果备节点需要绑定vip,并且要绑定的vip不是主节点要解绑的Vip，则需要做一些检查工作
-    slave_bind_vip_chan := make(chan []byte)
+    slave_bind_vip_chan := make(chan Stdout_and_stderr)
     if r.FormValue("slave_bind_vip")!="" && r.FormValue("slave_bind_vip") != r.FormValue("master_unbind_vip") {
         cmd := "ping " + r.FormValue("slave_bind_vip") + " -c 3 | grep 'ttl'" 
         go ssh_run_chan(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port,cmd,slave_bind_vip_chan)  
@@ -1248,9 +1248,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //如果主节点需要解绑vip，前面则需要做一些检查工作,现在获取异步执行结果
     if r.FormValue("master_unbind_vip")!="" {
-        master_unbind_vip_out := <- master_unbind_vip_chan  
-        var master_unbind_vip_ret Stdout_and_stderr
-        json.Unmarshal(master_unbind_vip_out,&master_unbind_vip_ret)     
+        master_unbind_vip_ret := <- master_unbind_vip_chan  
         if master_unbind_vip_ret.Stderr != "" {
             error_msg = "主节点切为备节点，检查要解绑的VIP[" + r.FormValue("master_unbind_vip") + "]出错，详情：" + master_unbind_vip_ret.Stderr
             OutputJson(w,"FAIL",error_msg,0)              
@@ -1267,9 +1265,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //如果备节点需要解绑vip，前面则需要做一些检查工作,现在获取异步执行结果  
     if r.FormValue("slave_unbind_vip")!="" {
-        slave_unbind_vip_out := <- slave_unbind_vip_chan
-        var slave_unbind_vip_ret Stdout_and_stderr
-        json.Unmarshal(slave_unbind_vip_out,&slave_unbind_vip_ret)
+        slave_unbind_vip_ret := <- slave_unbind_vip_chan
         if slave_unbind_vip_ret.Stderr != "" {
             error_msg = "备节点切为主节点，检查要解绑的VIP[" + r.FormValue("slave_unbind_vip") + "]出错，详情：" + slave_unbind_vip_ret.Stderr
             OutputJson(w,"FAIL",error_msg,0)              
@@ -1286,10 +1282,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //如果主节点需要绑定vip,并且要绑定的vip不是备节点要解绑的Vip，前面则需要做一些检查工作,现在获取异步执行结果
     if r.FormValue("master_bind_vip")!="" && r.FormValue("master_bind_vip") != r.FormValue("slave_unbind_vip") {
-        master_bind_vip_out := <- master_bind_vip_chan
-        var master_bind_vip_ret Stdout_and_stderr
-        json.Unmarshal(master_bind_vip_out,&master_bind_vip_ret) 
-        
+        master_bind_vip_ret := <- master_bind_vip_chan
         if master_bind_vip_ret.Stderr != "" {
             error_msg = "主节点切为备节点,检查要绑定的VIP[" + r.FormValue("master_bind_vip") + "]是否已经被占用时出错，详情：" + master_bind_vip_ret.Stderr
             OutputJson(w,"FAIL",error_msg,0)              
@@ -1306,9 +1299,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //如果备节点需要绑定vip,并且要绑定的vip不是主节点要解绑的Vip，前面则需要做一些检查工作,现在获取异步执行结果
     if r.FormValue("slave_bind_vip")!="" && r.FormValue("slave_bind_vip") != r.FormValue("master_unbind_vip") {
-        slave_bind_vip_out := <- slave_bind_vip_chan
-        var slave_bind_vip_ret Stdout_and_stderr
-        json.Unmarshal(slave_bind_vip_out,&slave_bind_vip_ret)  
+        slave_bind_vip_ret := <- slave_bind_vip_chan
         if slave_bind_vip_ret.Stderr != "" {
             error_msg = "备节点切为主节点，检查要绑定的VIP[" + r.FormValue("slave_bind_vip") + "]是否已经被占用时出错，详情：" + slave_bind_vip_ret.Stderr
             OutputJson(w,"FAIL",error_msg,0)              
@@ -1351,9 +1342,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //如果切换前主节点解绑vip,前面则需要做异步做处理工作,现在获取异步执行结果     
     if r.FormValue("master_unbind_vip")!="" {
-        master_unbind_vip_out := <- master_unbind_vip_chan  
-        var master_unbind_vip_ret Stdout_and_stderr
-        json.Unmarshal(master_unbind_vip_out,&master_unbind_vip_ret)    
+        master_unbind_vip_ret := <- master_unbind_vip_chan  
         if master_unbind_vip_ret.Stderr != "" {
             error_msg = "主节点切为备节点，切换前执行解绑vip出错，详情：" + master_unbind_vip_ret.Stderr
             OutputJson(w,"FAIL",error_msg,0)              
@@ -1364,16 +1353,14 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //如果切换前备节点解绑vip,前面则需要做异步做处理工作,现在获取异步执行结果     
     if r.FormValue("slave_unbind_vip")!="" {
-        slave_unbind_vip_out := <- slave_unbind_vip_chan
-        var slave_unbind_vip_ret Stdout_and_stderr
-        json.Unmarshal(slave_unbind_vip_out,&slave_unbind_vip_ret)
+        slave_unbind_vip_ret := <- slave_unbind_vip_chan
         if slave_unbind_vip_ret.Stderr != "" {
             error_msg = "备节点切为主节点，切换前执行解绑vip出错，详情：" + slave_unbind_vip_ret.Stderr
             OutputJson(w,"FAIL",error_msg,0)              
             go write_log(remote_ip,modlename,username,"Error",error_msg)        
             return    
         }
-    }
+    }   
     
     //下面开始执行主备切换  
     //关闭主节点服务 
@@ -1413,17 +1400,18 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
         OutputJson(w,"FAIL",error_msg,0)              
         go write_log(remote_ip,modlename,username,"Error",error_msg)        
         return  
-    } 
+    }
+    
     //主备切换切换工作结束
     
     //切换后检查两个节点是否为主备关系
     for i := 0; i < 10; i++ {
-        go master_slave_relation_check(&master_row,&slave_row,master_slave_relation_check_chan)
+        go master_slave_relation_check(&slave_row,&master_row,master_slave_relation_check_chan)
         ret := <- master_slave_relation_check_chan 
         if ret == "" {
             break
         } 
-        time.Sleep(1 * time.Second)    
+        time.Sleep(1 * time.Second)
     }
     if ret != "" {
         error_msg = "切换后验证失败，详情：" + ret
@@ -1448,9 +1436,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
      //切换后原来的主节点（现在变成备节点了）需要绑定vip,前面则做了异步绑定处理,现在获取异步执行结果           
     if r.FormValue("master_bind_vip")!="" {
-        master_bind_vip_out := <- master_bind_vip_chan
-        var master_bind_vip_ret Stdout_and_stderr
-        json.Unmarshal(master_bind_vip_out,&master_bind_vip_ret) 
+        master_bind_vip_ret := <- master_bind_vip_chan  
         if master_bind_vip_ret.Stderr != "" {
             error_msg = "切换成功，但主节点切为备节点后绑定vip出错，详情：" + master_bind_vip_ret.Stderr
             OutputJson(w,"SUCCESS",error_msg,0)              
@@ -1461,9 +1447,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //切换后原来的备节点（现在变成主节点了）需要绑定vip,前面则做了异步绑定处理,现在获取异步执行结果  
     if r.FormValue("slave_bind_vip")!="" {
-        slave_bind_vip_out := <- slave_bind_vip_chan
-        var slave_bind_vip_ret Stdout_and_stderr
-        json.Unmarshal(slave_bind_vip_out,&slave_bind_vip_ret)  
+        slave_bind_vip_ret := <- slave_bind_vip_chan
         if slave_bind_vip_ret.Stderr != "" {
             error_msg = "切换成功，但备节点切为主节点后绑定vip出错，详情：" + slave_bind_vip_ret.Stderr
             OutputJson(w,"SUCCESS",error_msg,0)              
@@ -1492,37 +1476,38 @@ func master_slave_relation_check(master_row *Row,slave_row *Row,s chan string) {
     //通过pg_controldata先确认两个节点的状态是否正确
     //异步检查主节点
     cmd := master_row.Pg_bin + "pg_controldata " + master_row.Pg_data   
-    master_out_chan := make(chan []byte)   
+    master_out_chan := make(chan Stdout_and_stderr)   
     go ssh_run_chan(master_row.Ssh_user, master_row.Ssh_password, master_row.Host, master_row.Ssh_port,cmd,master_out_chan)  
     
     //异步检查备节点
     cmd = slave_row.Pg_bin + "pg_controldata " + slave_row.Pg_data + ";cat " + slave_row.Pg_data + "recovery.conf" 
-    slave_out_chan := make(chan []byte)
+    slave_out_chan := make(chan Stdout_and_stderr)
     go ssh_run_chan(slave_row.Ssh_user, slave_row.Ssh_password, slave_row.Host, slave_row.Ssh_port,cmd,slave_out_chan)  
     
     //获取异步检查主节点返回的信息
-    master_out := <- master_out_chan  
-    var master_ret Stdout_and_stderr
-    json.Unmarshal(master_out,&master_ret)
+    master_ret := <- master_out_chan  
     if master_ret.Stderr !="" {
         s <- "pg_controldata获取主节点信息出错，详情：" + master_ret.Stderr 
+        return
     } 
     if !strings.Contains(master_ret.Stdout, "in production") {
         s <- "pg_controldata检查到主节点处于非运行状态，不可以切换"
+        return
     }    
     
     //获取异步检查备节点返回的信息
-    slave_out := <- slave_out_chan  
-    var slave_ret Stdout_and_stderr
-    json.Unmarshal(slave_out,&slave_ret)
+    slave_ret := <- slave_out_chan  
     if slave_ret.Stderr !="" {
         s <- "pg_controldata获取备节点信息出错，详情：" + master_ret.Stderr 
+        return
     } 
     if !strings.Contains(slave_ret.Stdout, "in archive recovery") {
         s <- "pg_controldata检查到备节点处于非运行状态，不可以切换"
+        return
     } 
     if !strings.Contains(slave_ret.Stdout, "host=" + master_row.Host + " port=" + fmt.Sprintf("%d",master_row.Pg_port)) {
         s <- "pg_controldata检查到要切换的两个节点非主备关系，不可以切换"
+        return
     } 
     
     //通过连接数据库确认两个节点的状态是否正确
@@ -1539,26 +1524,31 @@ func master_slave_relation_check(master_row *Row,slave_row *Row,s chan string) {
     master_conn,err := pgx.Connect(master_config)
     if err!=nil {
         s <- "连接主节点服务出错，详情：" + err.Error()
+        return
     }
+    defer master_conn.Close()  
     sql := "select CASE WHEN current_setting('wal_level') in ('minimal','archive') THEN '普通节点' WHEN pg_is_in_recovery() THEN '备节点' ELSE '主节点' END AS service_type from pg_stat_replication where client_addr='" + slave_row.Host + "' and state='streaming'" 
     rows, err := master_conn.Query(sql) 
     if err != nil {
         s <- "查询获取主节点类型出错，详情：" + err.Error() 
+        return
     }  
     if rows.Next() {
         var master_service_type string 
         err = rows.Scan( &master_service_type )
         if err != nil {  
             s <- "查询获取主节点类型出错，详情：" + err.Error()    
+            return
         }
         if master_service_type!="主节点" {
             s <- "查询获取主节点类型为非主节点，不可以切换"
+            return
         }
     } else {
-        s <- "查询主节点检查到要切换的两个节点非主备关系，不可以切换"    
+        s <- "查询主节点检查到要切换的两个节点非主备关系，不可以切换" 
+        return
     }
     rows.Close() 
-    master_conn.Close()  
     
     //连接slave_db 
     var slave_config pgx.ConnConfig
@@ -1572,30 +1562,36 @@ func master_slave_relation_check(master_row *Row,slave_row *Row,s chan string) {
     slave_conn,err = pgx.Connect(slave_config)
     if err!=nil {
         s <- "连接备节点服务出错，详情：" + err.Error()
+        return
     } 
+    defer slave_conn.Close() 
     sql = "select CASE WHEN current_setting('wal_level') in ('minimal','archive') THEN '普通节点' WHEN pg_is_in_recovery() THEN '备节点' ELSE '主节点' END AS service_type,pg_read_file('recovery.conf') AS recovery " 
     rows, err = slave_conn.Query(sql) 
     if err != nil {
         s <- "查询获取备节点类型出错，详情：" + err.Error() 
+        return
     }  
+    defer rows.Close()       
     if rows.Next() {
         var slave_recovery string 
         var slave_service_type string
         err = rows.Scan( &slave_service_type,&slave_recovery )
         if err != nil {  
-            s <- "查询获取备节点类型出错，详情：" + err.Error()    
+            s <- "查询获取备节点类型出错，详情：" + err.Error()   
+            return
         }
         if slave_service_type!="备节点" {
             s <- "查询获取备节点类型为非备节点，不可以切换"
+            return
         }
         if !strings.Contains(slave_recovery, "host=" + master_row.Host + " port=" + fmt.Sprintf("%d",master_row.Pg_port)) {
             s <- "备节点上查询检查到要切换的两个节点非主备关系，不可以切换"
+            return
         }   
     } else {
         s <- "备节点查询要切换的两个节点之间的关系出错"    
+        return
     }
-    rows.Close()  
-    slave_conn.Close() 
     s <- ""
 }
 
@@ -1855,19 +1851,18 @@ port      --ssh服务的port
 cmd       --要执行的脚本
 
 返回值说明：
-s -- 一个struct的序列化值
+s -- 结构体Stdout_and_stderr变量
 */
 
-func ssh_run_chan(user string, password string, host string, port int,cmd string,s chan []byte) {
-    //定义返回的struct
-    out := new(Stdout_and_stderr)
+func ssh_run_chan(user string, password string, host string, port int,cmd string,s chan Stdout_and_stderr) {
+    //定义返回的struct 
+    var out Stdout_and_stderr
     //ssh连接                    
     session, err := ssh_connect(user, password, host, port)
     if err!=nil {
         out.Stdout = ""
         out.Stderr = err.Error()
-        b, _ := json.Marshal(out)   
-        s <-  b
+        s <-  out
         return 
     } 
         
@@ -1881,10 +1876,11 @@ func ssh_run_chan(user string, password string, host string, port int,cmd string
     
     out.Stdout = stdout.String()
     out.Stderr = stderr.String() 
-    b, _ := json.Marshal(out)   
-    s <-  b
+    s <- out
     return
 } 
+
+
 
 /*
 功能描述：写入日志处理 
