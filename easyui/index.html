@@ -516,17 +516,21 @@ $(document).ready(function()
     
     //修改节点资料
     $('#cy_update_click').bind('click', function(){  
-        var row = $('#dg').datagrid('getSelected');      
-        if (row)
-            {                                   
-                $('#update_dialog').dialog('open').dialog('center').dialog('setTitle','修改节点资料');
-                $('#update_dialog_form').form('load',row);  
-                url="./updatenode/";
-            }
-        else
-            {            
-                $.messager.alert('系统提示',"请选择要修改的节点", 'warning');               
-            }    
+        var row = $('#dg').datagrid('getSelected');    
+        if (!row)
+            {
+                var rows = $('#dg').datagrid('getChecked');  
+                if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要修改的节点", 'warning');    
+                          return;
+                     }
+                $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                var row = $('#dg').datagrid('getSelected');      
+            }  
+        $('#update_dialog').dialog('open').dialog('center').dialog('setTitle','修改节点资料');
+        $('#update_dialog_form').form('load',row);  
+        url="./updatenode/";
     });       
     
     //修改节点资料－－保存按钮
@@ -575,8 +579,14 @@ $(document).ready(function()
         var row = $('#dg').datagrid('getSelected');    
         if (!row)
             {
-                 $.messager.alert('系统提示',"请选择要删除的节点", 'warning'); 
-                 return;
+                 var rows = $('#dg').datagrid('getChecked'); 
+                 if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要删除的节点", 'warning'); 
+                          return;
+                     }
+                 $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                 var row = $('#dg').datagrid('getSelected');      
             }  
         $.messager.confirm('删除节点记录确认', '你确认要删除这个节点<font color=red>[ ' + row.node_name + ' ]</font>记录（非物理删除节点文件）?', function(r){
             if (r)
@@ -1014,7 +1024,7 @@ $(document).ready(function()
                                  }
                              else
                                  {
-                                     //$.messager.alert('系统提示',result.return_msg, 'info');   
+                                     //document.location.href="./index.html";
                                      $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','你已经安全退出，想操作请重新登录');     
                                  }  
                          },

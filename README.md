@@ -261,4 +261,9 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 * 1、修改"ssh_run_chan"函数信道返回数据类型,使后面获取信道返回的数据处理起来更简便直接
 * 2、修改"promoteHandler"接口中bug,先前在主备切换后判断主备关系时传入master_slave_relation_check函数的变量倒颠了
 
+####2017-3-11号
+
+* 1、增加和编辑节时,限制"主机名+data路径"不能重复
+* 2、index.html做了操作提示优化
+
 
