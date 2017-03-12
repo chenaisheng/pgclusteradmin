@@ -1244,7 +1244,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //异步检查两个节点是否为主备关系
     master_slave_relation_check_chan := make(chan string)        
-    go master_slave_relation_check(&master_row,&slave_row,master_slave_relation_check_chan)
+    go master_slave_relation_check(master_row,slave_row,master_slave_relation_check_chan)
          
     
     //如果主节点需要解绑vip，则需要做一些检查工作
@@ -1437,7 +1437,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     
     //切换后检查两个节点是否为主备关系
     for i := 0; i < 10; i++ {
-        go master_slave_relation_check(&slave_row,&master_row,master_slave_relation_check_chan)
+        go master_slave_relation_check(slave_row,master_row,master_slave_relation_check_chan)
         ret := <- master_slave_relation_check_chan 
         if ret == "" {
             break
@@ -1503,7 +1503,7 @@ slave_row  -- Row结构指针
 return_msg -- 执行出错返回信息，如果检查两个节点为主备关系则返回空字符串""
 */
 
-func master_slave_relation_check(master_row *Row,slave_row *Row,s chan string) {
+func master_slave_relation_check(master_row Row,slave_row Row,s chan string) {
     //通过pg_controldata先确认两个节点的状态是否正确
     //异步检查主节点
     cmd := master_row.Pg_bin + "pg_controldata " + master_row.Pg_data   

@@ -241,6 +241,7 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 
 * 1、修改函数"getnode_type_and_status"的传入和信道返回为非地址传递
 * 2、修改函数"get_node_ip_bind_status"信道返回的数据为结构类型而非结构类型的序列化值,方便其它地方调用
+* 3、修改函数"master_slave_relation_check"的传入参数为非地址传递
 
 ####2017-3-11号
 
