@@ -380,7 +380,7 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request){
     var data Data = Data{}
     data.Rows = make([]Row,0)
     data.Total= 0      
-    end := make(chan *Row) 
+    end := make(chan Row) 
     for rows.Next() {             
         var row Row 
         err = rows.Scan(
@@ -404,7 +404,7 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request){
         //获取节点的类型和目前服务状态，主节点还是备节点。
         row.Json_id = data.Total
         data.Rows = append(data.Rows,row)
-        go getnode_type_and_status(end,&data.Rows[data.Total]) 
+        go getnode_type_and_status(end,data.Rows[data.Total]) 
         data.Total = data.Total + 1
     }    
     for i:=0; i < data.Total ; i++ {
@@ -428,7 +428,7 @@ row -- *Row指针
 返回值说明： 无
 */
 
-func getnode_type_and_status (end chan *Row,row *Row) {  
+func getnode_type_and_status (end chan Row,row Row) {  
     //初始化
     row.Service_status = "" 
     row.Service_type = ""   
@@ -589,6 +589,22 @@ func insertnodeHandler(w http.ResponseWriter, r *http.Request){
     }
     rows.Close()  
     
+    //检查节点是否已经存在,host + pg_data 不能相同
+    sql = " SELECT id FROM nodes WHERE host = $1 AND pg_data = $2 "
+    rows, err = conn.Query(sql,r.FormValue("host"),r.FormValue("pg_data")) 
+    if err != nil {
+        error_msg =  "执行查询失败，详情：" + err.Error()
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)            
+        return 
+    }
+    
+    if rows.Next() {
+        OutputJson(w,"FAIL","主机名+data路径已经存在",0)   
+        return
+    }
+    rows.Close() 
+    
     sql = `
     INSERT INTO nodes
     (
@@ -731,6 +747,21 @@ func updatenodeHandler(w http.ResponseWriter, r *http.Request){
     }   
     if rows.Next() {
         OutputJson(w,"FAIL","主机名+数据库端口号已经存在",0) 
+        return
+    } 
+    rows.Close()  
+    
+    //检查节点是否已经存在,host + pg_data 不能相同    
+    sql = " SELECT id FROM nodes WHERE host = $1 AND pg_data = $2 AND id != $3 "
+    rows, err = conn.Query(sql,r.FormValue("host"),r.FormValue("pg_data"),r.FormValue("id")) 
+    if err != nil {
+        error_msg =  "执行查询失败，详情：" + err.Error()
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)       
+        return 
+    }   
+    if rows.Next() {
+        OutputJson(w,"FAIL","主机名+data路径已经存在",0) 
         return
     } 
     rows.Close()  
@@ -1026,8 +1057,8 @@ func serviceadminHandler  (w http.ResponseWriter, r *http.Request,act string){
                 time.Sleep(1 * time.Second) 
             }
             //重新获取节点的状态
-            end := make(chan *Row)    
-            go getnode_type_and_status(end,&row)
+            end := make(chan Row)    
+            go getnode_type_and_status(end,row)
             t := <-end
             error_msg = "执行 [ " + act + " ] 成功，node_id为 [ " + r.FormValue("id") + " ]"
             
@@ -1634,17 +1665,15 @@ func promote_get_ip_bind_statusHandler  (w http.ResponseWriter, r *http.Request)
     }  
     
     //异步获取主节点ip绑定情况
-    master_ip_status_chan:= make(chan []byte) 
+    master_ip_status_chan:= make(chan Stdout_and_stderr) 
     go get_node_ip_bind_status(master_id,master_ip_status_chan)    
     
     //异步获取备节点ip绑定情况
-    slave_ip_status_chan:= make(chan []byte)   
+    slave_ip_status_chan:= make(chan Stdout_and_stderr)   
     go get_node_ip_bind_status(slave_id,slave_ip_status_chan)
     
     //获取访问主节点异常执行返回ip绑定结果
-    master_ip_status := <- master_ip_status_chan
-    var master_ret Stdout_and_stderr
-    json.Unmarshal(master_ip_status,&master_ret)
+    master_ret := <- master_ip_status_chan
     if master_ret.Stderr !="" {
         error_msg =  "获取主节点ip绑定情况失败，详情：" + master_ret.Stderr
         OutputJson(w,"FAIL",error_msg,0)   
@@ -1653,9 +1682,7 @@ func promote_get_ip_bind_statusHandler  (w http.ResponseWriter, r *http.Request)
     }     
     
     //获取访问主节点异常执行返回ip绑定结果
-    slave_ip_status := <- slave_ip_status_chan
-    var slave_ret Stdout_and_stderr
-    json.Unmarshal(slave_ip_status,&slave_ret)
+    slave_ret := <- slave_ip_status_chan
     if slave_ret.Stderr !="" {
         error_msg =  "获取备节点ip绑定情况失败，详情：" + slave_ret.Stderr
         OutputJson(w,"FAIL",error_msg,0)   
@@ -1687,17 +1714,16 @@ nodeid   -- 节点的id号
 s -- 通道返回一个结构体的序列化数据
 */
 
-func get_node_ip_bind_status(nodeid int,s chan []byte){
+func get_node_ip_bind_status(nodeid int,s chan Stdout_and_stderr){
     //定义返回的struct
-    out := new(Stdout_and_stderr)
+    var out Stdout_and_stderr
     //连接db          
     var conn *pgx.Conn
     conn, err := pgx.Connect(extractConfig())    
     if err != nil {
         out.Stdout = ""
         out.Stderr = err.Error()
-        b, _ := json.Marshal(out)   
-        s <-  b
+        s <- out
         return 
     }  
     //随后关闭连接
@@ -1709,8 +1735,7 @@ func get_node_ip_bind_status(nodeid int,s chan []byte){
     if err != nil {
         out.Stdout = ""
         out.Stderr = err.Error()
-        b, _ := json.Marshal(out)   
-        s <-  b    
+        s <- out    
         return
     }
     defer rows.Close()    
@@ -1721,15 +1746,13 @@ func get_node_ip_bind_status(nodeid int,s chan []byte){
         if err != nil {
             out.Stdout = ""
             out.Stderr = err.Error()
-            b, _ := json.Marshal(out)   
-            s <-  b   
+            s <- out   
             return 
         }   
     } else {
         out.Stdout = ""
         out.Stderr = "节点不存在"
-        b, _ := json.Marshal(out)   
-        s <-  b   
+        s <- out  
         return  
     }  
     
@@ -1738,8 +1761,7 @@ func get_node_ip_bind_status(nodeid int,s chan []byte){
     stdout,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)  
     out.Stdout = stdout
     out.Stderr = stderr 
-    b, _ := json.Marshal(out)
-    s <-  b        
+    s <- out        
     return
 } 
 
