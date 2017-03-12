@@ -235,6 +235,34 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     
 ###六、更新日志
     
+###六、更新日志 
+
+####2017-3-12号
+
+* 1、修改函数"getnode_type_and_status"的传入和信道返回为非地址传递
+* 2、修改函数"get_node_ip_bind_status"信道返回的数据为结构类型而非结构类型的序列化值,方便其它地方调用
+
+####2017-3-11号
+
+* 1、增加和编辑节时,限制"主机名+data路径"不能重复
+* 2、index.html做了操作提示优化
+
+####2017-3-9号  
+* 1、修改"ssh_run_chan"函数信道返回数据类型,使后面获取信道返回的数据处理起来更简便直接
+* 2、修改"promoteHandler"接口中bug,先前在主备切换后判断主备关系时传入master_slave_relation_check函数的变量倒颠了
+
+####2017-3-8号
+
+* 1、修改"getnoderowsHandler"接口,由原来的顺序获取列表中各个节点的运行状态修改为异步获取,大大的提高了列表接口返回效率
+    
+####2017-3-7号
+
+* 1、修改"promoteHandler"接口,由原来的顺序执行修改为多次异步执行,使执行的速度提高一陪
+    
+####2017-3-4号
+
+* 1、修正 项目中所有找不到ip命令和ifconfig命令的错误
+
 ####2017-3-3号
 
 * 1、修正 "promote_get_ip_bind_statusHandler" 接口（获取主备节点ip绑定情况接口），变成异步同时获取主备节点的ip绑定详情，提高程序的响应速度
@@ -242,33 +270,4 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 * 3、修改 "insertnodeHandler"和"updatenodeHandler" 接口（修改节点资料），限制host+pg_port不能重复
 * 4、修正 index.html中前端删除节点资料后,在没刷新的情况下无法执行主备切换功能
 * 5、修正 index.html中前端主备切换判断主备节点类型不正确的bug
-* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误
-
-####2017-3-4号
-
-* 1、修正 项目中所有找不到ip命令和ifconfig命令的错误
-
-####2017-3-7号
-
-* 1、修改"promoteHandler"接口,由原来的顺序执行修改为多次异步执行,使执行的速度提高一陪
-
-####2017-3-8号
-
-* 1、修改"getnoderowsHandler"接口,由原来的顺序获取列表中各个节点的运行状态修改为异步获取,大大的提高了列表接口返回效率
-
-####2017-3-9号
-
-* 1、修改"ssh_run_chan"函数信道返回数据类型,使后面获取信道返回的数据处理起来更简便直接
-* 2、修改"promoteHandler"接口中bug,先前在主备切换后判断主备关系时传入master_slave_relation_check函数的变量倒颠了
-
-####2017-3-11号
-
-* 1、增加和编辑节时,限制"主机名+data路径"不能重复
-* 2、index.html做了操作提示优化
-
-####2017-3-12号
-
-* 1、修改函数"getnode_type_and_status"的传入和信道返回为非地址传递
-* 2、修改函数"get_node_ip_bind_status"信道返回的数据为结构类型而非结构类型的序列化值,方便其它地方调用
-
-
+* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误                                                                                
