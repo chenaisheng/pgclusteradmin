@@ -115,6 +115,11 @@ func main() {
     //显示服务status
     http.HandleFunc("/servicestatus/", servicestatusHandler)
     
+    //vip管理
+    http.HandleFunc("/vipadmin/", vipadminHandler)
+    //vip管理获取节点ip绑定情况
+    http.HandleFunc("/vipadmin_get_ip_bind_status/", vipadmin_get_ip_bind_statusHandler)
+    
     //主备切换
     http.HandleFunc("/promote/", promoteHandler)
     //主备切换弹出窗口时获取主备节点的ip绑定情况
@@ -1081,6 +1086,238 @@ func serviceadminHandler  (w http.ResponseWriter, r *http.Request,act string){
         go write_log(remote_ip,modlename,username,"Error",error_msg) 
         OutputJson(w,"FAIL",error_msg,0)   
     }
+} 
+
+/*
+功能描述：vip管理,绑定和解绑ip
+            
+参数说明：
+w   -- http.ResponseWriter 
+r   -- http.Request指针   
+
+返回值说明：无 
+*/
+
+func vipadminHandler (w http.ResponseWriter, r *http.Request) {
+    var error_msg string
+    modlename := "vipadminHandler"
+    remote_ip := get_remote_ip(r)  
+    username := http_init(w,r)
+    if username == "" {
+        OutputJson(w,"FAIL","系统无法识别你的身份",1)   
+        return
+    }
+    
+    //检查act的合法性
+    if r.FormValue("act") != "bind" && r.FormValue("act") != "unbind" {
+        error_msg =  "非法的act值 [ " + r.FormValue("act") + " ]"     
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    } 
+    
+    //检查id是否合法
+    if !str_is_int(r.FormValue("id")) {
+        error_msg =  "非法的node_id号 [ " + r.FormValue("id") + " ]"     
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    } 
+    
+    //判断要操作的VIP地址是否为合法的IP地址
+    if !str_is_ip(r.FormValue("vip")) {
+        error_msg = "VIP[" + r.FormValue("vip") + "]不是合法的ip地址"  
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg)           
+        return
+    }
+    //判断设备号是否为空
+    if r.FormValue("vip_networkcard")=="" {
+        error_msg = "网卡设备号不能为空" 
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return  
+    } 
+    //判断绑定操作用户名是否为空
+    if r.FormValue("bind_vip_user")=="" {
+        error_msg = "绑定操作用户名不能为空" 
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return  
+    } 
+    //判断绑定操作用户密码是否为空 
+    if r.FormValue("bind_vip_password")=="" {
+        error_msg = "绑定操作用户密码不能为空" 
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return  
+    } 
+    
+    //连接db    
+    var conn *pgx.Conn
+    conn, err := pgx.Connect(extractConfig())
+    if err != nil {
+        error_msg =  "连接db失败，详情：" + err.Error()     
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg)             
+        return
+    } 
+    defer conn.Close() 
+    
+    //查询返回节点信息
+    sql := `
+    SELECT 
+        id,node_name,
+        createtime::text,host,
+        ssh_port,ssh_user,
+        ssh_password,pg_bin,
+        pg_data,pg_port,
+        pg_database,pg_user,
+        pg_password,remark 
+    FROM 
+        nodes 
+    WHERE 
+        id = $1 
+    `
+    
+    rows, err := conn.Query(sql,r.FormValue("id")) 
+    if err != nil {
+        error_msg = "执行查询失败，详情：" + err.Error()
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)      
+        return
+    }    
+    
+    var row Row   
+    if rows.Next() {     
+        err = rows.Scan( 
+            &row.Id , &row.Node_name , 
+            &row.Createtime , &row.Host , 
+            &row.Ssh_port , &row.Ssh_user , 
+            &row.Ssh_password , &row.Pg_bin , 
+            &row.Pg_data, &row.Pg_port, 
+            &row.Pg_database, &row.Pg_user, 
+            &row.Pg_password, &row.Remark )
+        if err != nil {
+            error_msg = "执行查询失败，详情："+err.Error() 
+            OutputJson(w,"FAIL",error_msg,0)              
+            go write_log(remote_ip,modlename,username,"Error",error_msg)        
+            return  
+        }   
+    } else {
+        error_msg = "主节点已经不存在,id号 [ " + r.FormValue("id") + " ]，node_name [ " + r.FormValue("node_name") + " ]" 
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return  
+    }
+    rows.Close()  
+    
+    //如果绑定vip,则需要做一些检查工作 
+    cmd := ""
+    if r.FormValue("act") == "bind" {
+        cmd = "ping " + r.FormValue("vip") + " -c 3 | grep 'ttl'"         
+    } else {
+        cmd = "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("vip") + "'|grep '" + r.FormValue("vip_networkcard") + "'"   
+    }
+    stdout,stderr := ssh_run(r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port,cmd)  
+    if stderr != "" {
+        if r.FormValue("act") == "bind" {
+            error_msg = "检查要绑定的VIP[" + r.FormValue("vip") + "]是否已经被占用时出错，详情：" + stderr     
+        } else {
+            error_msg = "检查要解绑的VIP[" + r.FormValue("vip") + "]出错，详情：" + stderr
+        }     
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return 
+    } 
+    if stdout != "" && r.FormValue("act") == "bind" {
+        error_msg = "要绑定的VIP[" + r.FormValue("vip") + "]已经被占用,需要先从占用的机器上解绑"       
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return 
+    }
+    if stdout == "" && r.FormValue("act") == "unbind" {
+        error_msg = "要解绑的VIP[" + r.FormValue("vip") + "]不存在,请确认绑定的网卡[" + r.FormValue("vip_networkcard") + "]是否配置正确"    
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return 
+    }
+    
+    //执行解绑或绑定VIP操作
+    if r.FormValue("act") == "bind" {
+        cmd = "cmdpath=`which 'ifconfig'`;$cmdpath '" + r.FormValue("vip_networkcard") + "' '" + r.FormValue("vip") + "'" 
+    } else {
+        cmd = "cmdpath=`which 'ip'`;$cmdpath addr del '" + r.FormValue("vip") + "/24' dev '" + r.FormValue("vip_networkcard") + "'" 
+    }
+    stdout,stderr = ssh_run(r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port,cmd)  
+    if stderr != "" {
+        if r.FormValue("act") == "bind" {
+            error_msg = "绑定vip出错，详情：" + stderr            
+        } else {
+            error_msg = "解绑vip出错，详情：" + stderr
+        }
+        OutputJson(w,"FAIL",error_msg,0)              
+        go write_log(remote_ip,modlename,username,"Error",error_msg)        
+        return 
+    }   
+    
+    OutputJson(w,"SUCCESS","执行成功！",0)  
+    go write_log(remote_ip,modlename,username,"Log","执行成功，id [ " + r.FormValue("id") + " ]")    
+    return   
+}
+
+/*
+功能描述：vip管理时获取节点的ip绑定情况
+            
+参数说明：
+w   -- http.ResponseWriter 
+r   -- http.Request指针   
+
+返回值说明：无 
+*/
+
+func vipadmin_get_ip_bind_statusHandler (w http.ResponseWriter, r *http.Request) {
+    var error_msg string
+    modlename := "vipadmin_get_ip_bind_statusHandler"
+    remote_ip := get_remote_ip(r)  
+    username := http_init(w,r)
+    if username == "" {
+        OutputJson(w,"FAIL","系统无法识别你的身份",1)   
+        return
+    }   
+    
+    //判断主节点id合法性
+    id,err := strconv.Atoi(r.FormValue("id")) 
+    if err != nil {
+        error_msg = "节点id号不是合法的int类型，id号为 [ " + r.FormValue("id") + " ]" 
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    }
+    
+    //异步获取节点ip绑定情况
+    ip_status_chan:= make(chan Stdout_and_stderr) 
+    go get_node_ip_bind_status(id,ip_status_chan)    
+    //获取访问主节点异常执行返回ip绑定结果
+    ip_status_ret := <- ip_status_chan
+    if ip_status_ret.Stderr !="" {
+        error_msg =  "获取主节点ip绑定情况失败，详情：" + ip_status_ret.Stderr
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return 
+    }
+    
+    //定义返回的结构体
+    type Ret struct{ 
+        Return_code string  `json:"return_code"`    
+        Return_msg string  `json:"return_msg"` 
+        Show_login_dialog int `json:"show_login_dialog"`
+        Vipadmin_ip_status string `json:"vipadmin_ip_status"`    
+    }
+    
+    out := &Ret{"SUCCESS", "获取成功", 0, ip_status_ret.Stdout}
+    b, _ := json.Marshal(out)
+    w.Write(b)  
 }
 
 /*
@@ -1146,7 +1383,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     } 
     defer conn.Close() 
     
-    //检查master节点当前状态是否为主节点和运行中
+    //查询master节点信息
     sql := `
     SELECT 
         id,node_name,
@@ -1194,7 +1431,7 @@ func promoteHandler  (w http.ResponseWriter, r *http.Request){
     }
     rows.Close() 
     
-    //检查slave节点当前状态是否为备节点和运行中
+    //查询slave节点信息
     sql = `
     SELECT 
         id,node_name,

@@ -14,7 +14,7 @@
 <body>
 
 
-<div id='Loading' style="position:absolute;z-index:1000;top:0px;left:0px;width:100%;height:58%;background:#f2f2f2;text-align:center;padding-top: 20%;">
+<div id='Loading' style="position:absolute;z-index:1000;top:0px;left:0px;width:100%;height:2000;background:#f2f2f2;text-align:center;padding-top: 20%;">
 <h1><image src='./themes/default/images/loading.gif'/><font color="#15428B">加载中···</font></h1>
 </div>
 
@@ -59,6 +59,7 @@
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-edit',plain:true" id="cy_update_click">修改资料</a>
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-remove',plain:true" id="cy_delete_click">删除节点</a>
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-service',plain:true" id="cy_serviceadmin_click">服务管理</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-vip',plain:true" id="cy_vipadmin_click">VIP管理</a> 
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-promote',plain:true" id="cy_promote_click">主备切换</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-password',plain:true" id="cy_password_click">修改登录密码</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-exit',plain:true" id="cy_exit_click">退出</a>  
@@ -206,6 +207,77 @@
     <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>                    
 <!--服务管理窗口-->
+
+<!--vip管理窗口-->
+<div id="vipadmin_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#vipadmin_dialog_buttons',closed:true,width:680,height:658,closable:true"> <!--modal是遮罩层--> 
+ <div style="padding:10px 5px 5px 10px">      
+   <form id="vipadmin_dialog_form" method="post"> 
+       <table cellpadding="3" width="99%">
+          <tr>
+            <td align="center" width="120">节点编号</td>
+            <td><input class="easyui-textbox" name="id" id="vipadmin_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+            <td align="center" width="120">节点名称</td>
+            <td><input class="easyui-textbox" name="node_name" data-options="readonly:true"/></td>
+          </tr>
+          <tr>
+            <td align="center" width="120">节点类别</td>
+            <td><input class="easyui-textbox" name="service_type" data-options="readonly:true"/></td>
+            <td align="center" width="120">运行状态</td>
+            <td><input class="easyui-textbox" name="service_status" data-options="readonly:true"/></td>
+          </tr>
+          <tr>
+            <td align="center" width="120">版本号</td>
+            <td colspan="3"><input class="easyui-textbox" name="pg_version" data-options="readonly:true,width:492"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">主机名或IP</td>
+            <td><input class="easyui-textbox" name="host" data-options="readonly:true" /></td>
+            <td align="center" width="120">SSH端口号</td>
+            <td><input class="easyui-numberbox" name="ssh_port" data-options="readonly:true"/></td>
+          </tr>
+          <tr>
+            <td align="center" width="120">PG服务端程序路径</td>
+            <td colspan="3"><input class="easyui-textbox" name="pg_bin" data-options="readonly:true,width:492"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">PGDATA所在路径</td>
+            <td colspan="3"><select class="easyui-textbox" name="pg_data" data-options="readonly:true,width:492"/></td> 
+          </tr>  
+          <tr>
+            <td align="center">VIP地址</td>
+            <td><input class="easyui-textbox" name="vip" data-options="readonly:false,required:true,validType:['isip']"/></td>
+            <td align="center">网卡设备号</td>
+            <td><input class="easyui-textbox" name="vip_networkcard" data-options="readonly:false,required:true,prompt:'如eth0:1'"/></td>
+          </tr>  
+          <tr>
+            <td align="center">绑定操作用户名</td>
+            <td><input class="easyui-textbox" name="bind_vip_user" data-options="readonly:false,required:true"/></td>
+            <td align="center">操作用户密码</td>
+            <td><input class="easyui-passwordbox" name="bind_vip_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
+          </tr> 
+          <tr>
+            <td align="center" width="120">IP绑定详情</td>
+            <td colspan="3"><input class="easyui-textbox" name="vipadmin_ip_status" id="vipadmin_ip_status" data-options="readonly:true,multiline:true,width:492,height:180"  ></input></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">执行结果</td>
+            <td colspan="3"><input class="easyui-textbox" name="vipadmin_exec_result" id="vipadmin_exec_result" data-options="readonly:true,multiline:true,width:492,height:60"  ></input></td> 
+          </tr>   
+          <tr>
+             <td align="center" width="120">操作说明</td>
+             <td colspan="3">填写要解绑或绑定IP和对应的网卡设备号,再按"绑定VIP"或"解绑VIP"即可.Linnx下绑定vip一般需要root权限,不清楚网卡设备号请询问SA,千万不能乱操作</td> 
+           </tr>         
+       </table>         
+   </form>
+ </div>
+</div>
+<div id="vipadmin_dialog_buttons">
+ <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_bind" data-options="iconCls:'icon-vip',width:80">绑定VIP</a>   
+ <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_unbind" data-options="iconCls:'icon-vip-unbind',width:80">解绑VIP</a>   
+ <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>           
+ <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+</div>                    
+<!--vip管理窗口-->
 
 
 <!--主备切换窗口-->
@@ -717,6 +789,120 @@ $(document).ready(function()
     //服务管理－－取消按钮
     $('#serviceadmin_dialog_cancel').bind('click', function(){
         $('#serviceadmin_dialog').dialog('close');
+    });  
+    
+    //vip管理
+    $('#cy_vipadmin_click').bind('click', function(){  
+        var row = $('#dg').datagrid('getSelected');
+        if (!row)
+            {
+                var rows = $('#dg').datagrid('getChecked');  
+                if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要执行VIP管理的节点", 'warning');    
+                          return;
+                     }
+                $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                var row = $('#dg').datagrid('getSelected');      
+            }  
+        $('#vipadmin_dialog').dialog('open').dialog('center').dialog('setTitle','VIP管理');
+        $('#vipadmin_dialog_form').form('clear');  
+        if (row.service_type =="主节点" )
+            {
+                row.vip = row.master_vip;
+                row.vip_networkcard =row.master_vip_networkcard;
+            }
+        if (row.service_type =="备节点" )
+            {
+                row.vip = row.slave_vip;
+                row.vip_networkcard =row.slave_vip_networkcard;
+            }
+        $('#vipadmin_dialog_form').form('load',row);   
+        $('#vipadmin_dialog_ip_refresh').click();
+    }); 
+    
+    //vip管理－－绑定按钮
+    $('#vipadmin_dialog_bind').bind('click', function(){
+        vipadmin("bind")
+    });
+    
+    //vip管理－－绑定按钮
+    $('#vipadmin_dialog_unbind').bind('click', function(){
+        vipadmin("unbind")
+    });
+    
+    //vip管理--执行操作
+    function vipadmin(act) {
+        $('#vipadmin_dialog_form').form('submit', {
+            "url":"/vipadmin/", 
+            onSubmit: function(param){  
+                param.act = act;
+                var isValid = $(this).form('validate');
+                if (isValid){
+                     $.messager.progress();     
+                     return true;                     
+                }
+                return false;
+            },
+            success: function(result){
+                $.messager.progress('close');       
+                var result = eval('('+result+')');  
+                if (result.return_code=="FAIL")                               
+                    {                           
+                        if ( result.show_login_dialog == 1)
+                            {   
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                        else
+                            {
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                    }   
+                else
+                    {
+                        $.messager.alert('系统提示',result.return_msg, 'info');      
+                        $('#vipadmin_dialog_ip_refresh').click();  
+                    } 
+           }
+        });         
+    } 
+    
+    //vip管理--刷新ip绑定详情
+    $('#vipadmin_dialog_ip_refresh').bind('click',function(){
+        //$.messager.progress();   
+        $('#vipadmin_dialog_ip_refresh').linkbutton("disable");
+        $('#vipadmin_ip_status').textbox('setValue',"数据加载中...");
+        $.ajax({        
+                type:"POST",
+                url:"/vipadmin_get_ip_bind_status/",
+                data:{'id':$('#vipadmin_id').textbox('getValue')},
+                success:function(result){
+                    //$.messager.progress('close');   
+                    $('#vipadmin_dialog_ip_refresh').linkbutton("enable");        
+                    if (result.return_code=="FAIL")                               
+                        {                       
+                            if ( result.show_login_dialog == 1)
+                                {   
+                                    $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                                    //$('#promote_dialog').dialog('close');
+                                }
+                            else
+                                {
+                                    $.messager.alert('错误提示',result.return_msg, 'error');   
+                                }
+                        }
+                    else
+                        {
+                            $('#vipadmin_ip_status').textbox('setValue',result.vipadmin_ip_status);
+                        }  
+                },
+                dataType:"json"
+            });      
+    });
+    
+    //vip管理－－取消按钮
+    $('#vipadmin_dialog_cancel').bind('click', function(){
+        $('#vipadmin_dialog').dialog('close');
     });  
     
     

@@ -94,7 +94,15 @@
 .icon-exit{
  background:url('icons/exit.jpg') no-repeat center center;
 }
-
+.icon-vip{
+ background:url('icons/vip.png') no-repeat center center;
+}
+.icon-vip-unbind{
+ background:url('icons/vip_unbind.png') no-repeat center center;
+}
+.icon-run{
+ background:url('icons/run.gif') no-repeat center center;
+}
 
 .icon-mini-add{
 	background:url('icons/mini_add.png') no-repeat center center;
