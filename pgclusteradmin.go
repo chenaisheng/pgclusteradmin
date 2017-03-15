@@ -49,6 +49,8 @@ type Row struct {
     Bind_vip_user string `json:"bind_vip_user"`   
     Bind_vip_password string `json:"bind_vip_password"` 
     Remark string `json:"remark"` 
+    Return_code string  `json:"return_code"`    
+    Return_msg string  `json:"return_msg"` 
 }
 
 //节点记录集json结构
@@ -103,6 +105,11 @@ func main() {
     http.HandleFunc("/insertnode/", insertnodeHandler)
     //删除节点信息
     http.HandleFunc("/deletenode/", deletenodeHandler)
+    
+    //参数管理--获取配置文件的内容
+    http.HandleFunc("/parameter_get_file_contents/", parameter_get_file_contentsHandler)  
+    //提交参数
+    http.HandleFunc("/parameter_save/", parameter_saveHandler)  
     
     //start服务
     http.HandleFunc("/servicestart/", servicestartHandler)
@@ -1088,6 +1095,156 @@ func serviceadminHandler  (w http.ResponseWriter, r *http.Request,act string){
     }
 } 
 
+
+/*
+功能描述：参数配置--获取要配置文件的内容
+            
+参数说明：
+w   -- http.ResponseWriter 
+r   -- http.Request指针   
+
+返回值说明：无 
+*/
+
+func parameter_get_file_contentsHandler (w http.ResponseWriter, r *http.Request) {
+    var error_msg string
+    modlename := "parameter_get_file_contentsHandler"
+    remote_ip := get_remote_ip(r)  
+    username := http_init(w,r)
+    if username == "" {
+        OutputJson(w,"FAIL","系统无法识别你的身份",1)   
+        return
+    }   
+    
+    //判断主节点id合法性
+    id,err := strconv.Atoi(r.FormValue("id")) 
+    if err != nil {
+        error_msg = "节点id号不是合法的int类型，id号为 [ " + r.FormValue("id") + " ]" 
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    }
+    
+    //判断要获取文件名参数是否非法
+    if r.FormValue("parameter_file_name") != "postgresql.conf" && r.FormValue("parameter_file_name") != "pg_hba.conf" {
+        error_msg = "要获取的文件名参数值非法 [ " + r.FormValue("parameter_file_name") + " ]" 
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    }
+    
+    row_chan := make(chan Row) 
+    go get_node_row(id,row_chan)
+    row := <- row_chan
+    if row.Return_code == "FAIL" {
+        error_msg =  "获取节点资料失败,详情：" + row.Return_msg
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg)             
+        return
+    }  
+    
+    cmd := "cat " + row.Pg_data + r.FormValue("parameter_file_name") 
+    stdout,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)  
+    if stderr != "" {
+        error_msg =  "获取配置文件内容出错,详情：" + stderr
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg)             
+        return
+    }
+    
+    //定义返回的结构体
+    type Ret struct{ 
+        Return_code string  `json:"return_code"`    
+        Return_msg string  `json:"return_msg"` 
+        Show_login_dialog int `json:"show_login_dialog"`
+        Parameter_file_conetens string `json:"parameter_file_conetens"`    
+    }
+    
+    out := &Ret{"SUCCESS", "获取成功", 0, stdout}
+    b, _ := json.Marshal(out)
+    w.Write(b)  
+}
+
+/*
+功能描述：参数配置--提交参数,提交后可以只保存,可能reload,也可能restart
+            
+参数说明：
+w   -- http.ResponseWriter 
+r   -- http.Request指针   
+
+返回值说明：无 
+*/
+
+func parameter_saveHandler (w http.ResponseWriter, r *http.Request) {
+    var error_msg string
+    modlename := "parameter_get_file_contentsHandler"
+    remote_ip := get_remote_ip(r)  
+    username := http_init(w,r)
+    if username == "" {
+        OutputJson(w,"FAIL","系统无法识别你的身份",1)   
+        return
+    }   
+    
+    //判断主节点id合法性
+    id,err := strconv.Atoi(r.FormValue("id")) 
+    if err != nil {
+        error_msg = "节点id号不是合法的int类型，id号为 [ " + r.FormValue("id") + " ]" 
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    }
+    
+    //判断要获取文件名参数是否非法
+    if r.FormValue("parameter_file_name") != "postgresql.conf" && r.FormValue("parameter_file_name") != "pg_hba.conf" {
+        error_msg = "要获取的文件名参数值非法 [ " + r.FormValue("parameter_file_name") + " ]" 
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    }
+    
+    //判断act值是否非法
+    if r.FormValue("act") != "save" && r.FormValue("act") != "reload" && r.FormValue("act") != "restart" {
+        error_msg = "执行方式值非法 [ " + r.FormValue("act") + " ]" 
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg) 
+        return
+    }
+    
+    row_chan := make(chan Row) 
+    go get_node_row(id,row_chan)
+    row := <- row_chan
+    if row.Return_code == "FAIL" {
+        error_msg =  "获取节点资料失败,详情：" + row.Return_msg
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg)             
+        return
+    }  
+    
+    parameter_file_name :=  row.Pg_data + r.FormValue("parameter_file_name")                                                                                   
+    cmd := "cp " + parameter_file_name + " " + parameter_file_name + ".pgclusteradmin.bak" + ";echo \"" + r.FormValue("parameter_file_contents") + "\" > " + row.Pg_data + r.FormValue("parameter_file_name") 
+    //判断是否需要reload
+    if r.FormValue("act") == "reload" {
+        logfile := row.Pg_data + "parameter_" + username + "_reload.txt"    
+        cmd = cmd + ";" + row.Pg_bin + "pg_ctl reload -D " + row.Pg_data + " > " + logfile
+    }
+    //判断是否需要restart
+    if r.FormValue("act") == "restart" {
+        logfile := row.Pg_data + "parameter_" + username + "_restart.txt"
+        cmd = cmd + ";" + row.Pg_bin + "pg_ctl restart -D " + row.Pg_data + " -m fast > " + logfile 
+    }
+    _,stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port,cmd)  
+    if stderr != "" {
+        error_msg =  "保存配置文件内容出错,详情：" + stderr
+        OutputJson(w,"FAIL",error_msg,0)   
+        go write_log(remote_ip,modlename,username,"Error",error_msg)             
+        return
+    }
+    
+    OutputJson(w,"SUCCESS","执行成功！",0)  
+    go write_log(remote_ip,modlename,username,"Log","切换成功\nnode_id [ " + r.FormValue("id") + " ]\n参数文件[ " + r.FormValue("parameter_file_name") + " ]\n写入内容 [ " + r.FormValue("parameter_file_contents") + " ]")    
+    return  
+}
+
 /*
 功能描述：vip管理,绑定和解绑ip
             
@@ -1948,7 +2105,7 @@ func promote_get_ip_bind_statusHandler  (w http.ResponseWriter, r *http.Request)
 nodeid   -- 节点的id号
 
 返回值说明：
-s -- 通道返回一个结构体的序列化数据
+s -- 通道返回一个Stdout_and_stderr结构体
 */
 
 func get_node_ip_bind_status(nodeid int,s chan Stdout_and_stderr){
@@ -1999,6 +2156,84 @@ func get_node_ip_bind_status(nodeid int,s chan Stdout_and_stderr){
     out.Stdout = stdout
     out.Stderr = stderr 
     s <- out        
+    return
+} 
+
+/*
+功能描述：获取某个节点配置资料
+            
+参数说明：
+nodeid   -- 节点的id号
+
+返回值说明：
+s -- 通道返回一个Row结构体, Return_code = FAIL表示获取数据失败,失败原因存入在Return_msg中,
+*/
+
+func get_node_row(nodeid int,s chan Row){
+    //连接db    
+    var row Row   
+    row.Return_code = "SUCCESS"
+    row.Return_msg  = ""
+    var conn *pgx.Conn
+    conn, err := pgx.Connect(extractConfig())
+    if err != nil {
+        row.Return_code = "FAIL"
+        row.Return_msg = "连接db失败，详情：" + err.Error()     
+        s <- row 
+        return
+    } 
+    defer conn.Close() 
+    
+    //查询返回节点信息
+    sql := `
+    SELECT 
+        id,node_name,
+        createtime::text,host,
+        ssh_port,ssh_user,
+        ssh_password,pg_bin,
+        pg_data,pg_port,
+        pg_database,pg_user,
+        pg_password,
+        master_vip,master_vip_networkcard,
+        slave_vip,slave_vip_networkcard,    
+        bind_vip_user,bind_vip_password,     
+        remark 
+    FROM 
+        nodes 
+    WHERE 
+        id = $1 
+    `
+    
+    rows, err := conn.Query(sql,nodeid) 
+    if err != nil {
+        row.Return_code = "FAIL"
+        row.Return_msg = "执行查询失败，详情：" + err.Error()       
+        s <- row 
+        return
+    }  
+    
+    if rows.Next() {     
+        err = rows.Scan( 
+            &row.Id , &row.Node_name , 
+            &row.Createtime , &row.Host , 
+            &row.Ssh_port , &row.Ssh_user , 
+            &row.Ssh_password , &row.Pg_bin , 
+            &row.Pg_data, &row.Pg_port, 
+            &row.Pg_database, &row.Pg_user, 
+            &row.Pg_password, 
+            &row.Master_vip,&row.Master_vip_networkcard,
+            &row.Slave_vip,&row.Slave_vip_networkcard,
+            &row.Bind_vip_user,&row.Bind_vip_password, 
+            &row.Remark )
+        if err != nil {
+            row.Return_code = "FAIL"
+            row.Return_msg = "执行查询失败，详情："+err.Error()           
+            s <- row 
+            return
+        }   
+    } 
+    rows.Close()   
+    s <- row        
     return
 } 
 

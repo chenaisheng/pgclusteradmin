@@ -103,6 +103,9 @@
 .icon-run{
  background:url('icons/run.gif') no-repeat center center;
 }
+.icon-parameter{
+ background:url('icons/parameter.png') no-repeat center center;
+}
 
 .icon-mini-add{
 	background:url('icons/mini_add.png') no-repeat center center;
