@@ -106,6 +106,9 @@
 .icon-parameter{
  background:url('icons/parameter.png') no-repeat center center;
 }
+.icon-wakeup{
+ background:url('icons/wakeup.jpg') no-repeat center center;
+}
 
 .icon-mini-add{
 	background:url('icons/mini_add.png') no-repeat center center;

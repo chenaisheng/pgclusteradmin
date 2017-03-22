@@ -1,7 +1,7 @@
 <html>
 <head>
  <meta charset="UTF-8">
- <title>Postgresql集群管理器1.0</title>
+ <title>Postgresql集群管理器</title>
  <link rel="stylesheet" type="text/css" href="./themes/bootstrap/easyui.css">
  <link rel="stylesheet" type="text/css" href="./themes/icon.css">
  <link rel="stylesheet" type="text/css" href="./themes/color.css">
@@ -11,6 +11,17 @@
  <script type="text/javascript" src="./jquery.easyui.rule.js"></script> 
  <script type="text/javascript" src="./locale/easyui-lang-zh_CN.js"></script>
 </head>
+<STYLE type=text/css>
+.textbox-default-width{
+  width: 268px;
+}
+.textbox-default-width-long{
+  width: 705px;
+}
+.dialog-default-width{
+  width: 900px;
+}
+</STYLE>
 <body>
 
 
@@ -23,7 +34,6 @@
  <thead data-options="frozen:true">    
    <tr>       
      <th field="id" checkbox="true"></th> 
-     <!--<th data-options="field:'id',sortable:true,width:'100px'">节点编号</th>  -->
      <th data-options="field:'node_name',sortable:true,width:'150px'">节点名称</th>
      <th data-options="field:'createtime',sortable:true,width:'200px'">建立时间</th> 
      <th data-options="field:'service_type',width:'80px'">节点类别</th>    
@@ -36,19 +46,17 @@
      <th data-options="field:'host',width:'130px'">主机名或IP</th> 
      <th data-options="field:'ssh_port',width:'80px'">SSH端口号</th>    
      <th data-options="field:'ssh_user',width:'100px'">SSH用户名</th> 
-     <!--<th data-options="field:'ssh_password',width:'100px'">SSH登录密码</th>-->
      <th data-options="field:'pg_bin',width:'200px'">PG服务端程序路径</th>
      <th data-options="field:'pg_data',width:'200px'">PGDATA所在路径</th>
+	 <th data-options="field:'pg_log',width:'200px'">访问日志保存路径</th>
      <th data-options="field:'pg_port',width:'80px'">PG服务端口号</th> 
      <th data-options="field:'pg_database',width:'100px'">连接数据库名称</th> 
      <th data-options="field:'pg_user',width:'100px'">数据库用户名称</th> 
-     <!--<th data-options="field:'pg_password',width:'100px'">数据库用户密码</th>-->
      <th data-options="field:'master_vip',width:'100px'">做为主节点时绑定VIP</th>
      <th data-options="field:'master_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
      <th data-options="field:'slave_vip',width:'100px'">做为备节点时绑定VIP</th>
      <th data-options="field:'slave_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
      <th data-options="field:'bind_vip_user',width:'100px'">绑定网卡操作用户</th>
-     <!--<th data-options="field:'bind_vip_password',width:'100px'">绑定网卡操作密码</th>-->  
      <th data-options="field:'remark',width:'200px'">备注</th>  
    </tr>
  </thead>
@@ -60,76 +68,81 @@
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-remove',plain:true" id="cy_delete_click">删除节点</a>
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-parameter',plain:true" id="cy_parameter_click">参数配置</a>
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-service',plain:true" id="cy_serviceadmin_click">服务管理</a>
-  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-vip',plain:true" id="cy_vipadmin_click">VIP管理</a> 
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-vip',plain:true" id="cy_vipadmin_click">VIP绑定</a> 
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-wakeup',plain:true" id="cy_slave_wakeup_click">备机唤醒</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-promote',plain:true" id="cy_promote_click">主备切换</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-password',plain:true" id="cy_password_click">修改登录密码</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-exit',plain:true" id="cy_exit_click">退出</a>  
 </div>
 
 <!--修改资料窗口-->
-<div id="update_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#update_dialog_buttons',closed:true,width:680,height:528,closable:true"> <!--modal是遮罩层--> 
+<div id="update_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#update_dialog_buttons',closed:true,height:568,closable:true"> <!--modal是遮罩层--> 
  <div style="padding:30px 5px 5px 10px">      
    <form id="update_dialog_form" method="post"> 
      <table cellpadding="3" width="99%">
         <tr>
           <td align="center" width="120">节点编号</td>
-          <td><input class="easyui-textbox" name="id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
           <td align="center" width="120">节点名称</td>
-          <td><input class="easyui-textbox" name="node_name" data-options="required:true"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="node_name" data-options="required:true"/></td>
         </tr> 
         <tr>
           <td align="center" width="120">主机名或IP</td>
-          <td><input class="easyui-textbox" name="host" data-options="required:true" /></td>
+          <td><input class="easyui-textbox textbox-default-width" name="host" data-options="required:true" /></td>
           <td align="center" width="120">SSH端口号</td>
-          <td><input class="easyui-numberbox" name="ssh_port" data-options="required:true,min:1,precision:0"/></td>
+          <td><input class="easyui-numberbox textbox-default-width" name="ssh_port" data-options="required:true,min:1,precision:0"/></td>
         </tr> 
         <tr>
           <td align="center">SSH用户名</td>
-          <td><input class="easyui-textbox" name="ssh_user" data-options="required:true"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="ssh_user" data-options="required:true"/></td>
           <td align="center">SSH登录密码</td>
-          <td><input class="easyui-passwordbox" name="ssh_password" id="update_ssh_password" iconWidth="28" data-options="required:true"/></td>
+          <td><input class="easyui-passwordbox textbox-default-width" name="ssh_password" id="update_ssh_password" iconWidth="28" data-options="required:true"/></td>
         </tr> 
         <tr>
           <td align="center" width="120">PG服务端程序路径</td>
-          <td colspan="3"><input class="easyui-textbox" name="pg_bin" data-options="required:true,width:492"/></td> 
+          <td colspan="3"><input class="easyui-textbox  textbox-default-width-long" name="pg_bin" data-options="required:true"/></td> 
         </tr> 
         <tr>
           <td align="center" width="120">PGDATA所在路径</td>
-          <td colspan="3"><select class="easyui-textbox" name="pg_data" data-options="required:true,width:492"/></td> 
+          <td colspan="3"><select class="easyui-textbox  textbox-default-width-long" name="pg_data" data-options="required:true"/></td> 
+        </tr> 
+		<tr>
+          <td align="center" width="120">访问日志保存路径</td>
+          <td colspan="3"><select class="easyui-textbox  textbox-default-width-long" name="pg_log" data-options="required:false"/></td> 
         </tr> 
         <tr>
           <td align="center">PG服务端口号</td>
-          <td><input class="easyui-numberbox" name="pg_port" data-options="required:true,min:1,precision:0"/></td>
+          <td><input class="easyui-numberbox textbox-default-width" name="pg_port" data-options="required:true,min:1,precision:0"/></td>
           <td align="center">连接数据库名称</td>
-          <td><input class="easyui-textbox" name="pg_database" data-options="required:true"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="pg_database" data-options="required:true"/></td>
         </tr> 
         <tr>
           <td align="center">数据库用户名称</td>
-          <td><input class="easyui-textbox" name="pg_user" data-options="required:true"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="pg_user" data-options="required:true"/></td>
           <td align="center">数据库用户密码</td>
-          <td><input class="easyui-passwordbox" name="pg_password" id="update_pg_password" iconWidth="28" data-options="required:true"/></td>
+          <td><input class="easyui-passwordbox textbox-default-width" name="pg_password" id="update_pg_password" iconWidth="28" data-options="required:true"/></td>
         </tr> 
         <tr>
           <td align="center">做为主节点绑定VIP</td>
-          <td><input class="easyui-textbox" name="master_vip" data-options="required:false,validType:['isip']"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="master_vip" data-options="required:false,validType:['isip']"/></td>
           <td align="center">VIP绑定设备号</td>
-          <td><input class="easyui-textbox" name="master_vip_networkcard" data-options="required:false,prompt:'如eth0:1'"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="master_vip_networkcard" data-options="required:false,prompt:'如eth0:1'"/></td>
         </tr>  
         <tr>
           <td align="center">做为备节点绑定VIP</td>
-          <td><input class="easyui-textbox" name="slave_vip" data-options="required:false,validType:['isip']"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="slave_vip" data-options="required:false,validType:['isip']"/></td>
           <td align="center">VIP绑定设备号</td>
-          <td><input class="easyui-textbox" name="slave_vip_networkcard" data-options="required:false,prompt:'如eth0:1'"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="slave_vip_networkcard" data-options="required:false,prompt:'如eth0:1'"/></td>
         </tr> 
         <tr>
           <td align="center">绑定网卡操作用户</td>
-          <td><input class="easyui-textbox" name="bind_vip_user" data-options="required:false"/></td>
+          <td><input class="easyui-textbox textbox-default-width" name="bind_vip_user" data-options="required:false"/></td>
           <td align="center">绑定网卡操作密码</td>
-          <td><input class="easyui-passwordbox" name="bind_vip_password" id="update_bind_vip_password" iconWidth="28" data-options="required:false"/></td>
+          <td><input class="easyui-passwordbox textbox-default-width" name="bind_vip_password" id="update_bind_vip_password" iconWidth="28" data-options="required:false"/></td>
         </tr> 
         <tr>
           <td align="center" width="120">备注</td>
-          <td colspan="3"><input class="easyui-textbox" name="remark" data-options="multiline:true,width:492,height:60"  ></input></td> 
+          <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="remark" data-options="multiline:true,height:60"  ></input></td> 
         </tr>          
      </table>         
    </form>
@@ -142,23 +155,37 @@
 <!--修改资料窗口-->
 
 <!--参数设置窗口-->
-<div id="parameter_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#parameter_dialog_buttons',closed:true,width:910,height:688,closable:true"> <!--modal是遮罩层--> 
- <div style="padding:10px 5px 5px 10px">   
+<div id="parameter_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#parameter_dialog_buttons',closed:true,height:688,closable:true"> <!--modal是遮罩层--> 
+ <div style="padding:10px 5px 5px 5px">   
    <form id="parameter_dialog_form" method="post"> 
      <table cellpadding="3" width="99%">
        <tr>
          <td align="center" width="120">节点编号</td>
-         <td><input class="easyui-textbox" name="id" id="parameter_id" data-options="readonly:true,prompt:'系统自动编号',width:268"/></td>
+         <td><input class="easyui-textbox textbox-default-width" name="id" id="parameter_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
          <td align="center" width="120">节点名称</td>
-         <td><input class="easyui-textbox" name="node_name" data-options="readonly:true,width:268"/></td>
+         <td><input class="easyui-textbox textbox-default-width" name="node_name" data-options="readonly:true"/></td>
        </tr>
+	   <tr>
+         <td align="center" width="120">节点类别</td>
+         <td><input class="easyui-textbox textbox-default-width" name="service_type" id="parameter_service_type" data-options="readonly:true"/></td>
+         <td align="center" width="120">运行状态</td>
+         <td><input class="easyui-textbox textbox-default-width" name="service_status" id="parameter_service_status" data-options="readonly:true"/></td>
+       </tr>
+	   <tr>
+        <td align="center" width="120">版本号</td>
+        <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_version" id="parameter_pg_version" data-options="readonly:true"/></td> 
+      </tr> 
        <tr>
          <td align="center" width="120">配置文件</td>    
-         <td colspan="3"><select class="easyui-combobox" name="parameter_files" id="parameter_files" data-options="editable:false,panelHeight:'auto',width:702,valueField: 'value',textField: 'label',data: [{label: 'postgresql.conf',value: 'postgresql.conf',selected:true},{label: 'pg_hba.conf',value: 'pg_hba.conf'}]" required="true"></select></td> 
+         <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="parameter_files" id="parameter_files" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label'" required="true"></select></td> 
        </tr>
        <tr>
          <td align="center" width="120">文件内容</td>
-         <td colspan="3"><input class="easyui-textbox" name="parameter_file_contents" id="parameter_file_contents" data-options="readonly:false,multiline:true,width:702,height:510"></input></td> 
+         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="parameter_file_contents" id="parameter_file_contents" data-options="readonly:false,multiline:true,height:350"></input></td> 
+       </tr>  
+	   <tr>
+         <td align="center" width="120">执行结果</td>
+         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="exec_result" id="parameter_exec_result" data-options="readonly:true,multiline:true,height:80"  ></input></td> 
        </tr>  
      </table>  
    </form>
@@ -173,57 +200,61 @@
 <!--参数设置窗口-->
 
 <!--服务管理窗口-->
-<div id="serviceadmin_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#serviceadmin_dialog_buttons',closed:true,width:680,height:528,closable:true"> <!--modal是遮罩层--> 
+<div id="serviceadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#serviceadmin_dialog_buttons',closed:true,height:588,closable:true"> <!--modal是遮罩层--> 
  <div style="padding:30px 5px 5px 10px">      
    <form id="serviceadmin_dialog_form" method="post"> 
        <table cellpadding="3" width="99%">
           <tr>
             <td align="center" width="120">节点编号</td>
-            <td><input class="easyui-textbox" name="id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
             <td align="center" width="120">节点名称</td>
-            <td><input class="easyui-textbox" name="node_name" data-options="readonly:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="node_name" data-options="readonly:true"/></td>
           </tr>
           <tr>
             <td align="center" width="120">节点类别</td>
-            <td><input class="easyui-textbox" name="service_type" data-options="readonly:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="service_type" id="service_type" data-options="readonly:true"/></td>
             <td align="center" width="120">运行状态</td>
-            <td><input class="easyui-textbox" name="service_status" id="service_status" data-options="readonly:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="service_status" id="service_status" data-options="readonly:true"/></td>
           </tr>
           <tr>
             <td align="center" width="120">版本号</td>
-            <td colspan="3"><input class="easyui-textbox" name="pg_version" id="pg_version" data-options="readonly:true,width:492"/></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_version" id="pg_version" data-options="readonly:true"/></td> 
           </tr> 
           <tr>
             <td align="center" width="120">主机名或IP</td>
-            <td><input class="easyui-textbox" name="host" data-options="readonly:true" /></td>
+            <td><input class="easyui-textbox textbox-default-width" name="host" data-options="readonly:true" /></td>
             <td align="center" width="120">SSH端口号</td>
-            <td><input class="easyui-numberbox" name="ssh_port" data-options="readonly:true"/></td>
+            <td><input class="easyui-numberbox textbox-default-width" name="ssh_port" data-options="readonly:true"/></td>
           </tr> 
           <tr>
             <td align="center">SSH用户名</td>
-            <td><input class="easyui-textbox" name="ssh_user" data-options="readonly:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="ssh_user" data-options="readonly:true"/></td>
             <td align="center">SSH登录密码</td>
-            <td><input class="easyui-passwordbox" name="ssh_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
+            <td><input class="easyui-passwordbox textbox-default-width" name="ssh_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
           </tr> 
           <tr>
             <td align="center" width="120">PG服务端程序路径</td>
-            <td colspan="3"><input class="easyui-textbox" name="pg_bin" id="pg_bin" data-options="readonly:true,width:492"/></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_bin" id="pg_bin" data-options="readonly:true"/></td> 
           </tr> 
           <tr>
             <td align="center" width="120">PGDATA所在路径</td>
-            <td colspan="3"><select class="easyui-textbox" name="pg_data" id="pg_data" data-options="readonly:true,width:492"/></td> 
+            <td colspan="3"><select class="easyui-textbox textbox-default-width-long" name="pg_data" id="pg_data" data-options="readonly:true"/></td> 
           </tr> 
           <tr>
+            <td align="center" width="120">访问日志保存路径</td>
+            <td colspan="3"><select class="easyui-textbox textbox-default-width-long" name="pg_log" id="pg_log" data-options="readonly:true"/></td> 
+          </tr> 		
+          <tr>
             <td align="center" width="120">关闭模式</td>
-            <td colspan="3"><select class="easyui-combobox" name="mode" id="mode" data-options="editable:false,panelHeight:'auto',width:492,valueField: 'value',textField: 'label',data: [{label: 'smart',value: 'smart'},{label: 'fast',value: 'fast',selected:true},{label: 'immediate',value: 'immediate'}]" required="true"></select></td> 
+            <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="mode" id="mode" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: 'smart',value: 'smart'},{label: 'fast',value: 'fast',selected:true},{label: 'immediate',value: 'immediate'}]" required="true"></select></td> 
           </tr> 
           <tr>
             <td align="center" width="120">执行命令</td>
-            <td colspan="3"><input class="easyui-textbox" name="run_command" id="run_command" data-options="readonly:true,multiline:true,width:492,height:60"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="run_command" id="run_command" data-options="readonly:true,multiline:false"  ></input></td> 
           </tr> 
           <tr>
             <td align="center" width="120">执行结果</td>
-            <td colspan="3"><input class="easyui-textbox" name="exec_result" id="exec_result" data-options="readonly:true,multiline:true,width:492,height:60"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="exec_result" id="exec_result" data-options="readonly:true,multiline:true,height:120"  ></input></td> 
           </tr>          
        </table>         
    </form>
@@ -240,59 +271,59 @@
 <!--服务管理窗口-->     
 
 <!--vip管理窗口-->
-<div id="vipadmin_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#vipadmin_dialog_buttons',closed:true,width:680,height:658,closable:true"> <!--modal是遮罩层--> 
+<div id="vipadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#vipadmin_dialog_buttons',closed:true,height:658,closable:true"> <!--modal是遮罩层--> 
  <div style="padding:8px 5px 5px 8px">      
    <form id="vipadmin_dialog_form" method="post"> 
        <table cellpadding="3" width="99%">
           <tr>
             <td align="center" width="120">节点编号</td>
-            <td><input class="easyui-textbox" name="id" id="vipadmin_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="id" id="vipadmin_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
             <td align="center" width="120">节点名称</td>
-            <td><input class="easyui-textbox" name="node_name" data-options="readonly:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="node_name" data-options="readonly:true"/></td>
           </tr>
           <tr>
             <td align="center" width="120">节点类别</td>
-            <td><input class="easyui-textbox" name="service_type" data-options="readonly:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="service_type" data-options="readonly:true"/></td>
             <td align="center" width="120">运行状态</td>
-            <td><input class="easyui-textbox" name="service_status" data-options="readonly:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="service_status" data-options="readonly:true"/></td>
           </tr>
           <tr>
             <td align="center" width="120">版本号</td>
-            <td colspan="3"><input class="easyui-textbox" name="pg_version" data-options="readonly:true,width:492"/></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_version" data-options="readonly:true"/></td> 
           </tr> 
           <tr>
             <td align="center" width="120">主机名或IP</td>
-            <td><input class="easyui-textbox" name="host" data-options="readonly:true" /></td>
+            <td><input class="easyui-textbox textbox-default-width" name="host" data-options="readonly:true" /></td>
             <td align="center" width="120">SSH端口号</td>
-            <td><input class="easyui-numberbox" name="ssh_port" data-options="readonly:true"/></td>
+            <td><input class="easyui-numberbox textbox-default-width" name="ssh_port" data-options="readonly:true"/></td>
           </tr>
           <tr>
             <td align="center" width="120">PG服务端程序路径</td>
-            <td colspan="3"><input class="easyui-textbox" name="pg_bin" data-options="readonly:true,width:492"/></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_bin" data-options="readonly:true"/></td> 
           </tr> 
           <tr>
             <td align="center" width="120">PGDATA所在路径</td>
-            <td colspan="3"><select class="easyui-textbox" name="pg_data" data-options="readonly:true,width:492"/></td> 
+            <td colspan="3"><select class="easyui-textbox textbox-default-width-long" name="pg_data" data-options="readonly:true"/></td> 
           </tr>  
           <tr>
             <td align="center">VIP地址</td>
-            <td><input class="easyui-textbox" name="vip" data-options="readonly:false,required:true,validType:['isip']"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="vip" data-options="readonly:false,required:true,validType:['isip']"/></td>
             <td align="center">网卡设备号</td>
-            <td><input class="easyui-textbox" name="vip_networkcard" data-options="readonly:false,required:true,prompt:'如eth0:1'"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="vip_networkcard" data-options="readonly:false,required:true,prompt:'如eth0:1'"/></td>
           </tr>  
           <tr>
             <td align="center">绑定操作用户名</td>
-            <td><input class="easyui-textbox" name="bind_vip_user" data-options="readonly:false,required:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="bind_vip_user" data-options="readonly:false,required:true"/></td>
             <td align="center">操作用户密码</td>
-            <td><input class="easyui-passwordbox" name="bind_vip_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
+            <td><input class="easyui-passwordbox textbox-default-width" name="bind_vip_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
           </tr> 
           <tr>
             <td align="center" width="120">IP绑定详情</td>
-            <td colspan="3"><input class="easyui-textbox" name="vipadmin_ip_status" id="vipadmin_ip_status" data-options="readonly:true,multiline:true,width:492,height:180"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="vipadmin_ip_status" id="vipadmin_ip_status" data-options="readonly:true,multiline:true,height:180"  ></input></td> 
           </tr> 
           <tr>
             <td align="center" width="120">执行结果</td>
-            <td colspan="3"><input class="easyui-textbox" name="vipadmin_exec_result" id="vipadmin_exec_result" data-options="readonly:true,multiline:true,width:492,height:60"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="vipadmin_exec_result" id="vipadmin_exec_result" data-options="readonly:true,multiline:true,height:60"  ></input></td> 
           </tr>   
           <tr>
              <td align="center" width="120">操作说明</td>
@@ -308,66 +339,139 @@
  <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>           
  <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>                    
-<!--vip管理窗口-->
+<!--vip管理窗口-->   
 
+<!--备机唤醒管理窗口-->
+<div id="slave_wakeup_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#slave_wakeup_dialog_buttons',closed:true,height:688,closable:true"> <!--modal是遮罩层--> 
+ <div style="padding:8px 5px 5px 8px">      
+   <form id="slave_wakeup_dialog_form" method="post"> 
+       <table cellpadding="3" width="99%">
+          <tr>
+            <td align="center" width="120">节点编号</td>
+            <td><input class="easyui-textbox textbox-default-width" name="id" id="slave_wakeup_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+            <td align="center" width="120">节点名称</td>
+            <td><input class="easyui-textbox textbox-default-width" name="node_name" data-options="readonly:true"/></td>
+          </tr>
+          <tr>
+            <td align="center" width="120">节点类别</td>
+            <td><input class="easyui-textbox textbox-default-width" name="service_type" id="wakeup_service_type" data-options="readonly:true"/></td>
+            <td align="center" width="120">运行状态</td>
+            <td><input class="easyui-textbox textbox-default-width" name="service_status" data-options="readonly:true"/></td>
+          </tr>
+          <tr>
+            <td align="center" width="120">版本号</td>
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_version" data-options="readonly:true"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">主机名或IP</td>
+            <td><input class="easyui-textbox textbox-default-width" name="host" data-options="readonly:true" /></td>
+            <td align="center" width="120">SSH端口号</td>
+            <td><input class="easyui-numberbox textbox-default-width" name="ssh_port" data-options="readonly:true"/></td>
+          </tr>     
+          <tr>
+            <td align="center" width="120">PG服务端程序路径</td>
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_bin" data-options="readonly:true"/></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">PGDATA所在路径</td>
+            <td colspan="3"><select class="easyui-textbox textbox-default-width-long" name="pg_data" data-options="readonly:true"/></td> 
+          </tr>    
+          <tr>
+            <td align="center">唤醒后绑定VIP地址</td>
+            <td><input class="easyui-textbox textbox-default-width" name="vip" id="salve_makeup_vip" data-options="readonly:false,required:false,validType:['isip']"/></td>
+            <td align="center">绑定网卡设备号</td>
+            <td><input class="easyui-textbox textbox-default-width" name="vip_networkcard" data-options="readonly:false,required:false,prompt:'如eth0:1'"/></td>
+          </tr>  
+          <tr>
+            <td align="center">绑定操作用户名</td>
+            <td><input class="easyui-textbox textbox-default-width" name="bind_vip_user" data-options="readonly:false,required:false"/></td>
+            <td align="center">操作用户密码</td>
+            <td><input class="easyui-passwordbox textbox-default-width" name="bind_vip_password" iconWidth="28" data-options="readonly:false,required:false"/></td>
+          </tr> 
+          <tr>
+            <td align="center">唤醒后执行VACUUM</td>
+            <td colspan="3"><input class="easyui-switchbutton" name="vacuum_check" id="vacuum_check" data-options="checked:true,value:1"></td>
+          </tr> 
+          <tr>
+            <td align="center" width="120">IP绑定详情</td>
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_wakeup_ip_status" id="slave_wakeup_ip_status" data-options="readonly:true,multiline:true,height:180"  ></input></td> 
+          </tr> 
+          <tr>
+            <td align="center" width="120">执行结果</td>
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_wakeup_exec_result" id="slave_wakeup_exec_result" data-options="readonly:true,multiline:true,height:60"  ></input></td> 
+          </tr>   
+          <tr>
+             <td align="center" width="120">操作说明</td>
+             <td colspan="3">备机唤醒后,如果节点为同步复制模式并且没备机连接上来,则系统会修改运行参数把节点的同步模式修改为异步模式.</td> 
+          </tr>         
+       </table>         
+   </form>
+ </div>
+</div>
+<div id="slave_wakeup_dialog_buttons">
+ <a href="javascript:void(0)" class="easyui-linkbutton c5" id="slave_wakeup_dialog_run" data-options="iconCls:'icon-run',width:80">执行</a>   
+ <a href="javascript:void(0)" class="easyui-linkbutton" id="slave_wakeup_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>           
+ <a href="javascript:void(0)" class="easyui-linkbutton" id="slave_wakeup_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+</div>                    
+<!--备机唤醒管理窗口-->
 
 <!--主备切换窗口-->
-<div id="promote_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#promote_dialog_buttons',closed:true,width:710,height:688,closable:true"> <!--modal是遮罩层--> 
+<div id="promote_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#promote_dialog_buttons',closed:true,height:688,closable:true"> <!--modal是遮罩层--> 
    <form id="promote_dialog_form" method="post"> 
      <div class="easyui-tabs" id="promote_tabs" fit="true" style="width:100%;height:600px"> 
        <div title="主节点（master）" style="padding:10px">
          <table cellpadding="3" width="99%">
            <tr>
              <td align="center" width="120">节点编号</td>
-             <td><input class="easyui-textbox" name="master_id" id="promote_master_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_id" id="promote_master_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
              <td align="center" width="120">节点名称</td>
-             <td><input class="easyui-textbox" name="master_node_name" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_node_name" data-options="readonly:true"/></td>
            </tr>
            <tr>
              <td align="center" width="120">节点类别</td>
-             <td><input class="easyui-textbox" name="master_service_type" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_service_type" data-options="readonly:true"/></td>
              <td align="center" width="120">运行状态</td>
-             <td><input class="easyui-textbox" name="master_service_status" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_service_status" data-options="readonly:true"/></td>
            </tr>
            <tr>
              <td align="center" width="120">版本号</td>
-             <td colspan="3"><input class="easyui-textbox" name="master_pg_version" data-options="readonly:true,width:502"/></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="master_pg_version" data-options="readonly:true"/></td> 
            </tr> 
            <tr>
              <td align="center" width="120">主机名或IP</td>
-             <td><input class="easyui-textbox" name="master_host" data-options="readonly:true" /></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_host" data-options="readonly:true" /></td>
              <td align="center" width="120">SSH端口号</td>
-             <td><input class="easyui-numberbox" name="master_ssh_port" data-options="readonly:true"/></td>
+             <td><input class="easyui-numberbox textbox-default-width" name="master_ssh_port" data-options="readonly:true"/></td>
            </tr> 
            <tr>
              <td align="center">SSH用户名</td>
-             <td><input class="easyui-textbox" name="master_ssh_user" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_ssh_user" data-options="readonly:true"/></td>
              <td align="center">SSH登录密码</td>
-             <td><input class="easyui-passwordbox" name="master_ssh_password" data-options="readonly:false"/></td>
+             <td><input class="easyui-passwordbox textbox-default-width" name="master_ssh_password" data-options="readonly:false"/></td>
            </tr> 
            <tr>
              <td align="center" width="120">PG服务端程序路径</td>
-             <td colspan="3"><input class="easyui-textbox" name="master_pg_bin" id="master_pg_bin" data-options="readonly:true,width:502"/></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="master_pg_bin" id="master_pg_bin" data-options="readonly:true"/></td> 
            </tr> 
            <tr>
              <td align="center" width="120">PGDATA所在路径</td>
-             <td colspan="3"><select class="easyui-textbox" name="master_pg_data" id="master_pg_data" data-options="readonly:true,width:502"/></td> 
+             <td colspan="3"><select class="easyui-textbox textbox-default-width" name="master_pg_data" id="master_pg_data" data-options="readonly:true"/></td> 
            </tr> 
            <tr>
              <td align="center">PG服务端口号</td>
-             <td><input class="easyui-numberbox" name="master_pg_port" data-options="readonly:true"/></td>
+             <td><input class="easyui-numberbox textbox-default-width" name="master_pg_port" data-options="readonly:true"/></td>
              <td align="center">连接数据库名称</td>
-             <td><input class="easyui-textbox" name="master_pg_database" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_pg_database" data-options="readonly:true"/></td>
            </tr> 
            <tr>
              <td align="center">数据库用户名称</td>
-             <td><input class="easyui-textbox" name="master_pg_user" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_pg_user" data-options="readonly:true"/></td>
              <td align="center">数据库用户密码</td>
-             <td><input class="easyui-passwordbox" name="master_pg_password" data-options="readonly:false"/></td>
+             <td><input class="easyui-passwordbox textbox-default-width" name="master_pg_password" data-options="readonly:false"/></td>
            </tr>  
            <tr>
              <td align="center" width="120">IP绑定详情</td>
-             <td colspan="3"><input class="easyui-textbox" name="master_ip_status" id="master_ip_status" data-options="readonly:true,multiline:true,width:502,height:240"></input></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="master_ip_status" id="master_ip_status" data-options="readonly:true,multiline:true,height:240"></input></td> 
            </tr>   
          </table> 
        </div>
@@ -375,55 +479,55 @@
          <table cellpadding="3" width="99%">
            <tr>
              <td align="center" width="120">节点编号</td>
-             <td><input class="easyui-textbox" name="slave_id" id="promote_slave_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_id" id="promote_slave_id" data-options="readonly:true,prompt:'系统自动编号'"/></td>
              <td align="center" width="120">节点名称</td>
-             <td><input class="easyui-textbox" name="slave_node_name" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_node_name" data-options="readonly:true"/></td>
            </tr>
            <tr>
              <td align="center" width="120">节点类别</td>
-             <td><input class="easyui-textbox" name="slave_service_type" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_service_type" data-options="readonly:true"/></td>
              <td align="center" width="120">运行状态</td>
-             <td><input class="easyui-textbox" name="slave_service_status" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_service_status" data-options="readonly:true"/></td>
            </tr>
            <tr>
              <td align="center" width="120">版本号</td>
-             <td colspan="3"><input class="easyui-textbox" name="slave_pg_version" data-options="readonly:true,width:502"/></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_pg_version" data-options="readonly:true"/></td> 
            </tr> 
            <tr>
              <td align="center" width="120">主机名或IP</td>
-             <td><input class="easyui-textbox" name="slave_host" data-options="readonly:true" /></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_host" data-options="readonly:true" /></td>
              <td align="center" width="120">SSH端口号</td>
-             <td><input class="easyui-numberbox" name="slave_ssh_port" data-options="readonly:true"/></td>
+             <td><input class="easyui-numberbox textbox-default-width" name="slave_ssh_port" data-options="readonly:true"/></td>
            </tr> 
            <tr>
              <td align="center">SSH用户名</td>
-             <td><input class="easyui-textbox" name="slave_ssh_user" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_ssh_user" data-options="readonly:true"/></td>
              <td align="center">SSH登录密码</td>
-             <td><input class="easyui-passwordbox" name="slave_ssh_password" data-options="readonly:false"/></td>
+             <td><input class="easyui-passwordbox textbox-default-width" name="slave_ssh_password" data-options="readonly:false"/></td>
            </tr> 
            <tr>
              <td align="center" width="120">PG服务端程序路径</td>
-             <td colspan="3"><input class="easyui-textbox" name="slave_pg_bin" id="slave_pg_bin" data-options="readonly:true,width:502"/></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_pg_bin" id="slave_pg_bin" data-options="readonly:true"/></td> 
            </tr> 
            <tr>
              <td align="center" width="120">PGDATA所在路径</td>
-             <td colspan="3"><select class="easyui-textbox" name="slave_pg_data" id="slave_pg_data" data-options="readonly:true,width:502"/></td> 
+             <td colspan="3"><select class="easyui-textbox textbox-default-width-long" name="slave_pg_data" id="slave_pg_data" data-options="readonly:true"/></td> 
            </tr>
            <tr>
              <td align="center">PG服务端口号</td>
-             <td><input class="easyui-numberbox" name="slave_pg_port" data-options="readonly:true"/></td>
+             <td><input class="easyui-numberbox textbox-default-width" name="slave_pg_port" data-options="readonly:true"/></td>
              <td align="center">连接数据库名称</td>
-             <td><input class="easyui-textbox" name="slave_pg_database" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_pg_database" data-options="readonly:true"/></td>
            </tr> 
            <tr>
              <td align="center">数据库用户名称</td>
-             <td><input class="easyui-textbox" name="slave_pg_user" data-options="readonly:true"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_pg_user" data-options="readonly:true"/></td>
              <td align="center">数据库用户密码</td>
-             <td><input class="easyui-passwordbox" name="slave_pg_password" data-options="readonly:false"/></td>
+             <td><input class="easyui-passwordbox textbox-default-width" name="slave_pg_password" data-options="readonly:false"/></td>
            </tr>  
            <tr>
              <td align="center" width="120">IP绑定详情</td>
-             <td colspan="3"><input class="easyui-textbox" name="slave_ip_status" id="slave_ip_status" data-options="readonly:true,multiline:true,width:502,height:240"></input></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_ip_status" id="slave_ip_status" data-options="readonly:true,multiline:true,height:240"></input></td> 
            </tr>  
          </table>  
        </div>
@@ -431,7 +535,7 @@
          <table cellpadding="3" width="99%">  
            <tr>
              <td align="center" width="120">复制参数（recovery.conf）</td>
-             <td colspan="3"><input class="easyui-textbox" name="recovery_conf" data-options="readonly:true,multiline:true,width:502,height:90"></input></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="recovery_conf" data-options="readonly:false,required:true,multiline:true,height:90"></input></td> 
            </tr>  
            <tr>
              <td align="center" width="120">主节点切为备节点参数</td> 
@@ -439,21 +543,21 @@
            </tr>     
            <tr>
              <td align="center" width="120">切换前解绑vip</td>
-             <td><input class="easyui-textbox" name="master_unbind_vip" id="master_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_bind_vip\']','master_slave_vip_equal[\'#slave_unbind_vip\']']"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_unbind_vip" id="master_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_bind_vip\']','master_slave_vip_equal[\'#slave_unbind_vip\']']"/></td>
              <td align="center" width="120">解绑网卡设备号</td>
-             <td><input class="easyui-textbox" name="master_unbind_vip_networkcard" id="master_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_unbind_vip_networkcard" id="master_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
            </tr>
            <tr>
              <td align="center" width="120">切换后绑定vip</td>
-             <td><input class="easyui-textbox" name="master_bind_vip" id="master_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_unbind_vip\']','master_slave_vip_equal[\'#slave_bind_vip\']']"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_bind_vip" id="master_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_unbind_vip\']','master_slave_vip_equal[\'#slave_bind_vip\']']"/></td>
              <td align="center" width="120">绑定网卡设备号</td>
-             <td><input class="easyui-textbox" name="master_bind_vip_networkcard" id="master_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_bind_vip_networkcard" id="master_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
            </tr>
             <tr>
              <td align="center" width="120">绑定操作用户</td>
-             <td><input class="easyui-textbox" name="master_bind_user" id="master_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_bind_user" id="master_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
              <td align="center" width="120">操作用户密码</td>
-             <td><input class="easyui-passwordbox" name="master_bind_password" id="master_bind_password" data-options="readonly:false"/></td>
+             <td><input class="easyui-passwordbox textbox-default-width" name="master_bind_password" id="master_bind_password" data-options="readonly:false"/></td>
            </tr>
            <tr>
              <td align="center" width="120">备节点切为主节点参数</td> 
@@ -461,28 +565,28 @@
            </tr>       
            <tr>
              <td align="center" width="120">切换前解绑vip</td>
-             <td><input class="easyui-textbox" name="slave_unbind_vip" id="slave_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_bind_vip\']','master_slave_vip_equal[\'#master_unbind_vip\']']"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_unbind_vip" id="slave_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_bind_vip\']','master_slave_vip_equal[\'#master_unbind_vip\']']"/></td>
              <td align="center" width="120">解绑网卡设备号</td>
-             <td><input class="easyui-textbox" name="slave_unbind_vip_networkcard" id="slave_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_unbind_vip_networkcard" id="slave_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
            </tr>
            <tr>
              <td align="center" width="120">切换后绑定vip</td>
-             <td><input class="easyui-textbox" name="slave_bind_vip" id="slave_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_unbind_vip\']','master_slave_vip_equal[\'#master_bind_vip\']']"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_bind_vip" id="slave_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_unbind_vip\']','master_slave_vip_equal[\'#master_bind_vip\']']"/></td>
              <td align="center" width="120">绑定网卡设备号</td>
-             <td><input class="easyui-textbox" name="slave_bind_vip_networkcard" id="slave_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_bind_vip_networkcard" id="slave_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
            </tr>
            <tr>
              <td align="center" width="120">绑定操作用户</td>
-             <td><input class="easyui-textbox" name="slave_bind_user" id="slave_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_bind_user" id="slave_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
              <td align="center" width="120">操作用户密码</td>
-             <td><input class="easyui-passwordbox" name="slave_bind_password" id="slave_bind_password" data-options="readonly:false"/></td>
+             <td><input class="easyui-passwordbox textbox-default-width" name="slave_bind_password" id="slave_bind_password" data-options="readonly:false"/></td>
            </tr> 
            <tr>
              <td colspan="4" height="10"></td>
            </tr>
            <tr>
              <td align="center" width="120">执行结果</td>
-             <td colspan="3"><input class="easyui-textbox" name="promote_exec_result" id="promote_exec_result" data-options="readonly:true,multiline:true,width:502,height:90"></input></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="promote_exec_result" id="promote_exec_result" data-options="readonly:true,multiline:true,height:90"></input></td> 
            </tr> 
            <tr>
              <td colspan="4" height="10"></td>
@@ -742,7 +846,12 @@ $(document).ready(function()
             }                                                  
         $('#parameter_dialog').dialog('open').dialog('center').dialog('setTitle','参数配置');
         $('#parameter_dialog_form').form('clear');  
-        row.parameter_files = "postgresql.conf" ;
+		data = [{label: 'postgresql.conf',value: 'postgresql.conf'},{label: 'pg_hba.conf',value: 'pg_hba.conf'}]
+		if (row.service_type == "备节点" || row.service_status == "服务停止")
+			{
+				data.push({ "label": "recovery.conf", "value": "recovery.conf" });  
+			}
+		$("#parameter_files").combobox("loadData", data); 
         $('#parameter_dialog_form').form('load',row);   
         $('#parameter_files').combobox('select','postgresql.conf');
     });
@@ -777,16 +886,43 @@ $(document).ready(function()
                         {                       
                             if ( result.show_login_dialog == 1)
                                 {   
+									$('#parameter_dialog').dialog('close');
                                     $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
                                 }
                             else
                                 {
-                                    $.messager.alert('错误提示',result.return_msg, 'error');   
+                                    $.messager.alert('错误提示',"执行失败,详情见 [ 执行结果 ] 输出框", 'error');   
+									$('#parameter_exec_result').textbox('setValue',result.return_msg);   
+									if (result.service_status) 
+										{
+											$('#parameter_service_status').textbox('setValue',result.service_status);    
+					                        $('#parameter_service_type').textbox('setValue',result.service_type);    
+					                        $('#parameter_pg_version').textbox('setValue',result.pg_version);    
+					                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
+					                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
+										} 
                                 }
                         }
                     else
                         {      
-                            $.messager.alert('系统提示',result.return_msg, 'info');   
+						    if (act == "save")
+							    {
+									alertmsg = "执行成功"
+								}
+							else
+								{
+									alertmsg = "执行成功,详情见 [ 执行结果 ] 输出框"
+									$('#parameter_exec_result').textbox('setValue',result.return_msg);   
+								}	
+                            $.messager.alert('系统提示',alertmsg, 'info');  
+							if (result.service_status) 
+								{
+									$('#parameter_service_status').textbox('setValue',result.service_status);    
+			                        $('#parameter_service_type').textbox('setValue',result.service_type);    
+			                        $('#parameter_pg_version').textbox('setValue',result.pg_version);    
+			                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
+			                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
+								}
                         }  
                 },
                 dataType:"json"
@@ -808,6 +944,7 @@ $(document).ready(function()
                         {                       
                             if ( result.show_login_dialog == 1)
                                 {   
+									$('#parameter_dialog').dialog('close');
                                     $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
                                 }
                             else
@@ -817,7 +954,9 @@ $(document).ready(function()
                         }
                     else
                         {      
-                            $('#parameter_file_contents').textbox('setValue',result.parameter_file_conetens);  
+							s = result.parameter_file_conetens;
+							s = s.substring(0,s.length-1);
+                            $('#parameter_file_contents').textbox('setValue',s);  
                         }  
                 },
                 dataType:"json"
@@ -906,13 +1045,18 @@ $(document).ready(function()
                             }
                         else
                             {
-                                $.messager.alert('错误提示',result.return_msg, 'error');  
+                                $.messager.alert('错误提示',"执行失败,详情见 [ 执行结果 ] 输出框", 'error');  
                                 $('#exec_result').textbox('setValue',result.return_msg);  
+								$('#service_status').textbox('setValue',result.service_status);    
+		                        $('#service_type').textbox('setValue',result.service_type);    
+		                        $('#pg_version').textbox('setValue',result.pg_version);    
+		                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
+		                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
                             }
                     }   
                 else
                     {                             
-                        $.messager.alert('系统提示',act+"服务完成", 'info');     
+                        $.messager.alert('系统提示',act+"服务完成,详情见 [ 执行结果 ] 输出框", 'info');     
                         $('#exec_result').textbox('setValue',result.return_msg);    
                         $('#service_status').textbox('setValue',result.service_status);    
                         $('#service_type').textbox('setValue',result.service_type);    
@@ -943,7 +1087,7 @@ $(document).ready(function()
                 $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
                 var row = $('#dg').datagrid('getSelected');      
             }  
-        $('#vipadmin_dialog').dialog('open').dialog('center').dialog('setTitle','VIP管理');
+        $('#vipadmin_dialog').dialog('open').dialog('center').dialog('setTitle','VIP绑定管理');
         $('#vipadmin_dialog_form').form('clear');  
         if (row.service_type =="主节点" )
             {
@@ -1012,7 +1156,7 @@ $(document).ready(function()
         $('#vipadmin_ip_status').textbox('setValue',"数据加载中...");
         $.ajax({        
                 type:"POST",
-                url:"/vipadmin_get_ip_bind_status/",
+                url:"/get_ip_bind_status/",
                 data:{'id':$('#vipadmin_id').textbox('getValue')},
                 success:function(result){
                     //$.messager.progress('close');   
@@ -1031,7 +1175,7 @@ $(document).ready(function()
                         }
                     else
                         {
-                            $('#vipadmin_ip_status').textbox('setValue',result.vipadmin_ip_status);
+                            $('#vipadmin_ip_status').textbox('setValue',result.ip_bind_status);
                         }  
                 },
                 dataType:"json"
@@ -1042,7 +1186,120 @@ $(document).ready(function()
     $('#vipadmin_dialog_cancel').bind('click', function(){
         $('#vipadmin_dialog').dialog('close');
     });  
+	
+    //备机唤醒管理
+    $('#cy_slave_wakeup_click').bind('click', function(){  
+        var row = $('#dg').datagrid('getSelected');
+        if (!row)
+            {
+                var rows = $('#dg').datagrid('getChecked');  
+                if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要执行唤醒的备节点", 'warning');    
+                          return;
+                     }
+                $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                var row = $('#dg').datagrid('getSelected');      
+            }         
+        if (row.service_type!="备节点")
+            {
+                $.messager.alert('系统提示',"您选择要唤醒的节点不是备节点", 'warning');    
+                return; 
+            } 
+        
+        $('#slave_wakeup_dialog').dialog('open').dialog('center').dialog('setTitle','备机唤醒管理');
+        $('#slave_wakeup_dialog_form').form('clear');  
+        row.vip = row.master_vip;
+        row.vip_networkcard =row.master_vip_networkcard;
+        $('#slave_wakeup_dialog_form').form('load',row); 
+        $('#vacuum_check').switchbutton({'checked':true});  
+        $('#slave_wakeup_dialog_ip_refresh').click();
+		$('#slave_wakeup_dialog_run').linkbutton("enabled");  
+    }); 
     
+    //唤醒管理--执行操作
+    $('#slave_wakeup_dialog_run').bind('click', function() {
+		$.messager.confirm('备机唤醒确认','你确认要执行备机唤醒操作吗', function(r){
+			if (r){
+				$('#slave_wakeup_dialog_form').form('submit', {
+		            "url":"/slave_wakeup/", 
+		            onSubmit: function(param){  
+		                var isValid = $(this).form('validate');
+		                if (isValid){
+		                     $.messager.progress();     
+		                     return true;                     
+		                }
+		                return false;
+		            },
+		            success: function(result){
+		                $.messager.progress('close');       
+		                var result = eval('('+result+')');  
+		                if (result.return_code=="FAIL")                               
+		                    {                           
+		                        if ( result.show_login_dialog == 1)
+		                            {   
+		                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+		                            }
+		                        else
+		                            {
+		                                $.messager.alert('错误提示',result.return_msg, 'error');   
+		                            }
+		                    }   
+		                else
+		                    {
+								$('#slave_wakeup_dialog_run').linkbutton("disable");     
+		                        $.messager.alert('系统提示',result.return_msg, 'info');      
+								$('#wakeup_service_type').textbox('setValue',"主节点");    
+		                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
+		                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_type':'主节点'}});                   
+		                        if ($('#salve_makeup_vip').textbox('getValue')!="")
+		                            {
+		                                 $('#slave_makeup_dialog_ip_refresh').click();  
+		                            } 
+		                    } 
+		           }
+		        }); 
+			}
+		});     
+    }); 
+    
+    //唤醒管理--刷新ip绑定详情
+    $('#slave_wakeup_dialog_ip_refresh').bind('click',function(){
+        //$.messager.progress();   
+        $('#slave_wakeup_dialog_ip_refresh').linkbutton("disable");
+        $('#slave_wakeup_ip_status').textbox('setValue',"数据加载中...");
+        $.ajax({        
+                type:"POST",
+                url:"/get_ip_bind_status/",
+                data:{'id':$('#slave_wakeup_id').textbox('getValue')},
+                success:function(result){
+                    //$.messager.progress('close');   
+                    $('#slave_wakeup_dialog_ip_refresh').linkbutton("enable");        
+                    if (result.return_code=="FAIL")                               
+                        {                       
+                            if ( result.show_login_dialog == 1)
+                                {   
+                                    $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                                    //$('#promote_dialog').dialog('close');
+                                }
+                            else
+                                {
+                                    $.messager.alert('错误提示',result.return_msg, 'error');   
+                                }
+                        }
+                    else
+                        {
+                            $('#slave_wakeup_ip_status').textbox('setValue',result.ip_bind_status);
+                        }  
+                },
+                dataType:"json"
+            });      
+    });
+    
+    //唤醒管理－－取消按钮
+    $('#slave_wakeup_dialog_cancel').bind('click', function(){
+        $('#slave_wakeup_dialog').dialog('close');
+    });  
     
     //节点主备切换管理
     $('#cy_promote_click').bind('click', function(){  

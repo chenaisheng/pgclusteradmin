@@ -80,6 +80,7 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
        ssh_password text not null,  
        pg_bin text not null,
        pg_data text not null,
+       pg_log text not null default '',  
        pg_port integer not null,
        pg_database text not null,
        pg_user text not null,
@@ -102,7 +103,8 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     COMMENT ON COLUMN nodes.ssh_user IS 'ssh用户';   
     COMMENT ON COLUMN nodes.ssh_password IS 'ssh密码';  
     COMMENT ON COLUMN nodes.pg_bin IS 'pg管理程序所在路径';    
-    COMMENT ON COLUMN nodes.pg_data IS 'pgDATA所在路径';      
+    COMMENT ON COLUMN nodes.pg_data IS 'pgDATA所在路径';     
+    COMMENT ON COLUMN nodes.pg_log IS '用户访问日志保存路径';    
     COMMENT ON COLUMN nodes.pg_port IS 'pg服务端口号';   
     COMMENT ON COLUMN nodes.pg_user IS 'pg用户';   
     COMMENT ON COLUMN nodes.pg_password IS 'pg密码';   
@@ -235,47 +237,53 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     
 ###六、更新日志
 
-####2017-3-14号
+####2017-3-22
 
-* 1、新增一个新的功能模块"参数配置",支持一键保存reload或者一键保存restart,也可以只是保存当前配置
+* 1、新增一个新的功能模块“备机唤醒”,支持一键唤醒并且绑定VIP。唤醒成功后系统会自动检查节点是否为“同步复制模式”和是否有“同步备机”连接上来，如果是“同步复制模式”并且没有“同步备机”连接上来，程序会主动把节点降级为“异步复制”模式。
+* 2、重写了“服务管理”接口，解决了日志重定向后错误日志提取问题
+* 3、优化了部分接口，异步执行代码提高执行效率
 
-####2017-3-13号
+####2017-3-14
 
-* 1、新增一个新的功能模块"vip管理",为了让主备节点切换时,应用程序更好的兼容,我们会给postgresql节点绑定一个对外服务的IP
+* 1、新增一个新的功能模块“参数配置”,支持一键保存reload或者一键保存restart,也可以只是保存当前配置。
+
+####2017-3-13
+
+* 1、新增一个新的功能模块“vip管理”,为了让主备节点切换时,应用程序更好的兼容,我们会给postgresql节点绑定一个对外服务的IP。
 
 
-####2017-3-12号
+####2017-3-12
 
-* 1、修改函数"getnode_type_and_status"的传入和信道返回为非地址传递
-* 2、修改函数"get_node_ip_bind_status"信道返回的数据为结构类型而非结构类型的序列化值,方便其它地方调用
-* 3、修改函数"master_slave_relation_check"的传入参数为非地址传递
+* 1、修改函数“getnode_type_and_status”的传入和信道返回为非地址传递。
+* 2、修改函数“get_node_ip_bind_status”信道返回的数据为结构类型而非结构类型的序列化值,方便其它地方调用。
+* 3、修改函数“master_slave_relation_check”的传入参数为非地址传递。
 
-####2017-3-11号
+####2017-3-11
 
-* 1、增加和编辑节时,限制"主机名+data路径"不能重复
-* 2、index.html做了操作提示优化
+* 1、增加和编辑节时,限制“主机名+data路径”不能重复。
+* 2、index.html做了操作提示优化。
 
-####2017-3-9号  
-* 1、修改"ssh_run_chan"函数信道返回数据类型,使后面获取信道返回的数据处理起来更简便直接
-* 2、修改"promoteHandler"接口中bug,先前在主备切换后判断主备关系时传入master_slave_relation_check函数的变量倒颠了
+####2017-3-9 
+* 1、修改“ssh_run_chan”函数信道返回数据类型,使后面获取信道返回的数据处理起来更简便直接。
+* 2、修改“promoteHandler”接口中bug,先前在主备切换后判断主备关系时传入master_slave_relation_check函数的变量倒颠了。
 
-####2017-3-8号
+####2017-3-8
 
-* 1、修改"getnoderowsHandler"接口,由原来的顺序获取列表中各个节点的运行状态修改为异步获取,大大的提高了列表接口返回效率
+* 1、修改“getnoderowsHandler”接口,由原来的顺序获取列表中各个节点的运行状态修改为异步获取,大大的提高了列表接口返回效率。
     
-####2017-3-7号
+####2017-3-7
 
-* 1、修改"promoteHandler"接口,由原来的顺序执行修改为多次异步执行,使执行的速度提高一陪
+* 1、修改“promoteHandler”接口,由原来的顺序执行修改为多次异步执行,使执行的速度提高一陪。
     
-####2017-3-4号
+####2017-3-4
 
-* 1、修正 项目中所有找不到ip命令和ifconfig命令的错误
+* 1、修正 项目中所有找不到ip命令和ifconfig命令的错误。
 
-####2017-3-3号
+####2017-3-3
 
-* 1、修正 "promote_get_ip_bind_statusHandler" 接口（获取主备节点ip绑定情况接口），变成异步同时获取主备节点的ip绑定详情，提高程序的响应速度
-* 2、修正 "insertnodeHandler" 接口（增加节点资料），提前执行rows.Close() 的错误
-* 3、修改 "insertnodeHandler"和"updatenodeHandler" 接口（修改节点资料），限制host+pg_port不能重复
-* 4、修正 index.html中前端删除节点资料后,在没刷新的情况下无法执行主备切换功能
-* 5、修正 index.html中前端主备切换判断主备节点类型不正确的bug
-* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误                                                                                
+* 1、修正 “promote_get_ip_bind_statusHandler” 接口（获取主备节点ip绑定情况接口），变成异步同时获取主备节点的ip绑定详情，提高程序的响应速度。
+* 2、修正 “insertnodeHandler” 接口（增加节点资料），提前执行rows.Close() 的错误。
+* 3、修改 “insertnodeHandler”和“updatenodeHandler” 接口（修改节点资料），限制host+pg_port不能重复。
+* 4、修正 index.html中前端删除节点资料后,在没刷新的情况下无法执行主备切换功能。
+* 5、修正 index.html中前端主备切换判断主备节点类型不正确的bug。
+* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误 。                                                                               
