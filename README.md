@@ -295,4 +295,8 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 * 3、修改 “insertnodeHandler”和“updatenodeHandler” 接口（修改节点资料），限制host+pg_port不能重复。
 * 4、修正 index.html中前端删除节点资料后,在没刷新的情况下无法执行主备切换功能。
 * 5、修正 index.html中前端主备切换判断主备节点类型不正确的bug。
-* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误 。                                                                               
+* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误 。        
+
+###联系我们
+    
+![](gui_image/二维码.png)                                                                       
