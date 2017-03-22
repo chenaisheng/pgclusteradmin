@@ -15,15 +15,15 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 * golang: go version go1.7.4 linux/amd64
 * Postgresql：9.6.1 
 
-###三、Pgclusteradmin环境需求
+### 三、Pgclusteradmin环境需求
 
-####安装golang
+#### 安装golang
 
 * [root@ad ~]# yum install golang-1.7.4-1.el6.x86_64.rpm  
 * [root@ad ~]# yum install golang-src-1.7.4-1.el6.noarch.rpm
 * [root@ad ~]# yum install golang-bin-1.7.4-1.el6.x86_64.rpm
 
-####安装postgresql 
+#### 安装postgresql 
 
 * 使用postgresql主要是用于存储管理节点资料，操作员资料及操作日志
 
@@ -154,7 +154,7 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     COMMENT ON COLUMN log.log_level IS '日志级别';
     COMMENT ON COLUMN log.remark IS '日志内容';
 
-####下载pgclusteradmin所需要的go支持包
+#### 下载pgclusteradmin所需要的go支持包
 
 －－ssh支持包
 
@@ -198,9 +198,9 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     接收对象中: 100% (3613/3613), 1.24 MiB | 228.00 KiB/s, done.
     处理 delta 中: 100% (2481/2481), done.
     
-###四、pgclusteradmin部署配置和访问
+### 四、pgclusteradmin部署配置和访问
 
-####下载pgclusteradmin源码
+#### 下载pgclusteradmin源码
 
     [root@ad pgclusteradmin]# cd /home/ad
     [root@ad ad]# git clone https://github.com/chenaisheng/pgclusteradmin
@@ -212,87 +212,91 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     处理 delta 中: 100% (201/201), done.
     [root@ad ad]#
 
-####运行pgclusteradmin
+#### 运行pgclusteradmin
 
     [root@ad ad]# cd pgclusteradmin/
     [root@ad pgclusteradmin]# go run pgclusteradmin.g
 
-####访问pgclusteradmin
+#### 访问pgclusteradmin
 
     打开一个浏览器，输入 http://192.168.1.10:10001即可进入管理器，192.168.1.10换成你自己ip地址即可。
 
-###五、界面图 
+### 五、界面图 
 
-####主界面说明    
+#### 主界面说明    
 ![](gui_image/主备切换.png)
 
-####添加节点
+#### 添加节点
 ![](gui_image/添加节点.png)
 
-####参数配置
+#### 参数配置
 ![](gui_image/参数配置.png)
 
-####服务管理
+#### 服务管理
 ![](gui_image/服务管理.png)
 
-####VIP绑定
+#### VIP绑定
 ![](gui_image/VIP绑定.png)
 
-####备机唤醒
+#### 备机唤醒
 ![](gui_image/备机唤醒.png)
 
-####主备切换
+#### 主备切换
 ![](gui_image/主备切换.png)
     
-###六、更新日志
+### 六、更新日志
 
-####2017-3-22
+#### 2017-3-22
 
 * 1、新增一个新的功能模块“备机唤醒”,支持一键唤醒并且绑定VIP。唤醒成功后系统会自动检查节点是否为“同步复制模式”和是否有“同步备机”连接上来，如果是“同步复制模式”并且没有“同步备机”连接上来，程序会主动把节点降级为“异步复制”模式。
 * 2、重写了“服务管理”接口，解决了日志重定向后错误日志提取问题
 * 3、优化了部分接口，异步执行代码提高执行效率
 
-####2017-3-14
+#### 2017-3-14
 
 * 1、新增一个新的功能模块“参数配置”,支持一键保存reload或者一键保存restart,也可以只是保存当前配置。
 
-####2017-3-13
+#### 2017-3-13
 
 * 1、新增一个新的功能模块“vip管理”,为了让主备节点切换时,应用程序更好的兼容,我们会给postgresql节点绑定一个对外服务的IP。
 
 
-####2017-3-12
+#### 2017-3-12
 
 * 1、修改函数“getnode_type_and_status”的传入和信道返回为非地址传递。
 * 2、修改函数“get_node_ip_bind_status”信道返回的数据为结构类型而非结构类型的序列化值,方便其它地方调用。
 * 3、修改函数“master_slave_relation_check”的传入参数为非地址传递。
 
-####2017-3-11
+#### 2017-3-11
 
 * 1、增加和编辑节时,限制“主机名+data路径”不能重复。
 * 2、index.html做了操作提示优化。
 
-####2017-3-9 
+#### 2017-3-9 
 * 1、修改“ssh_run_chan”函数信道返回数据类型,使后面获取信道返回的数据处理起来更简便直接。
 * 2、修改“promoteHandler”接口中bug,先前在主备切换后判断主备关系时传入master_slave_relation_check函数的变量倒颠了。
 
-####2017-3-8
+#### 2017-3-8
 
 * 1、修改“getnoderowsHandler”接口,由原来的顺序获取列表中各个节点的运行状态修改为异步获取,大大的提高了列表接口返回效率。
     
-####2017-3-7
+#### 2017-3-7
 
 * 1、修改“promoteHandler”接口,由原来的顺序执行修改为多次异步执行,使执行的速度提高一陪。
     
-####2017-3-4
+#### 2017-3-4
 
 * 1、修正 项目中所有找不到ip命令和ifconfig命令的错误。
 
-####2017-3-3
+#### 2017-3-3
 
 * 1、修正 “promote_get_ip_bind_statusHandler” 接口（获取主备节点ip绑定情况接口），变成异步同时获取主备节点的ip绑定详情，提高程序的响应速度。
 * 2、修正 “insertnodeHandler” 接口（增加节点资料），提前执行rows.Close() 的错误。
 * 3、修改 “insertnodeHandler”和“updatenodeHandler” 接口（修改节点资料），限制host+pg_port不能重复。
 * 4、修正 index.html中前端删除节点资料后,在没刷新的情况下无法执行主备切换功能。
 * 5、修正 index.html中前端主备切换判断主备节点类型不正确的bug。
-* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误 。                                                                               
+* 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误 。  
+
+### 联系我们      
+
+![](gui_image/二维码.png)                                                                        
