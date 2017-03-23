@@ -1308,7 +1308,7 @@ r   -- http.Request指针
 
 func parameter_saveHandler(w http.ResponseWriter, r *http.Request) {
  var error_msg string
- modlename := "parameter_get_file_contentsHandler"
+ modlename := "parameter_saveHandler"
  remote_ip := get_remote_ip(r)
  username := http_init(w, r)
  if username == "" {
