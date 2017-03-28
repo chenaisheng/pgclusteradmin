@@ -246,6 +246,10 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     
 ### 六、更新日志
 
+#### 2017-3-28
+
+* 1、修复了ssh连接资源无法释放，造成内存泄漏的问题
+
 #### 2017-3-23
 
 * 1、修正了接口“parameter_saveHandler”变量modlename付值错误的bug
