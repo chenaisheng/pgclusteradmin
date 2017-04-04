@@ -119,6 +119,13 @@ func main() {
 
 	//参数管理--获取配置文件的内容
 	http.HandleFunc("/parameter_get_file_contents/", parameter_get_file_contentsHandler)
+	//获取备份或模板的文件列表
+	http.HandleFunc("/parameter_bak_template_list/", parameter_bak_template_listHandler)
+	//获取历史或模板文件内容
+	http.HandleFunc("/parameter_get_bak_template_contents/", parameter_get_bak_template_contentsHandler)
+	//删除历史或模板文件
+	http.HandleFunc("/parameter_files_bak_template_delete/", parameter_files_bak_template_deleteHandler)
+
 	//提交参数
 	http.HandleFunc("/parameter_save/", parameter_saveHandler)
 
@@ -1297,7 +1304,256 @@ func parameter_get_file_contentsHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 /*
-功能描述：参数配置--提交参数,提交后可以只保存,可能reload,也可能restart
+功能描述：参数配置--获取备份或模板文件列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func parameter_bak_template_listHandler(w http.ResponseWriter, r *http.Request) {
+	//节点行信息json结构
+	type List struct {
+		Id         int    `json:"id"`
+		Createtime string `json:"createtime"`
+		Username   string `json:"username"`
+		Version    string `json:"version"`
+		Remark     string `json:"remark"`
+	}
+
+	//节点记录集json结构
+
+	type Listdata struct {
+		Total int    `json:"total"`
+		Rows  []List `json:"rows"`
+	}
+
+	var error_msg string
+	modlename := "parameter_bak_template_listHandler"
+	remote_ip := get_remote_ip(r)
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	//连接db
+	var conn *pgx.Conn
+	conn, err := pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg = "连接db失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	if r.FormValue("category") == "bak" {
+		sql = `
+	    SELECT 
+	        id,createtime::text,
+	        username,version,
+			remark
+	    FROM 
+	        parameter_bak_template 
+		WHERE
+			nodeid = $1
+			AND filename = $2
+			AND category = 'bak'
+		ORDER BY
+		    createtime DESC
+	    `
+		rows, err = conn.Query(sql, r.FormValue("id"), r.FormValue("filename"))
+	} else {
+		sql = `
+	    SELECT 
+	        id,createtime::text,
+	        username,version,
+			remark
+	    FROM 
+	        parameter_bak_template 
+		WHERE
+			filename = $1
+			AND category = 'template'
+		ORDER BY
+		    createtime DESC
+	    `
+		rows, err = conn.Query(sql, r.FormValue("filename"))
+	}
+
+	if err != nil {
+		error_msg = "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer rows.Close()
+
+	var data Listdata = Listdata{}
+	data.Rows = make([]List, 0)
+	data.Total = 0
+	for rows.Next() {
+		var row List
+		err = rows.Scan(&row.Id, &row.Createtime, &row.Username, &row.Version, &row.Remark)
+		if err != nil {
+			error_msg = "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		data.Rows = append(data.Rows, row)
+		data.Total = data.Total + 1
+	}
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：参数配置--获取要历史文件的内容
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func parameter_get_bak_template_contentsHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	modlename := "parameter_get_bak_template_contentsHandler"
+	remote_ip := get_remote_ip(r)
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	//判断主节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = "节点id号不是合法的int类型，id号为 [ " + r.FormValue("id") + " ]"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接db
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg = "连接db失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := `
+    SELECT 
+        content
+    FROM 
+        parameter_bak_template
+    WHERE
+	    id = $1 
+    `
+
+	rows, err := conn.Query(sql, id)
+	if err != nil {
+		error_msg = "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer rows.Close()
+
+	var content string
+	if rows.Next() {
+		err = rows.Scan(&content)
+		if err != nil {
+			error_msg = "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+	}
+
+	//定义返回的结构体
+	type Ret struct {
+		Return_code             string `json:"return_code"`
+		Return_msg              string `json:"return_msg"`
+		Show_login_dialog       int    `json:"show_login_dialog"`
+		Parameter_file_conetens string `json:"parameter_file_conetens"`
+	}
+
+	out := &Ret{"SUCCESS", "获取成功", 0, content}
+	b, _ := json.Marshal(out)
+	w.Write(b)
+}
+
+/*
+功能描述：删除历史文件或模板文件
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func parameter_files_bak_template_deleteHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	modlename := "parameter_files_bak_template_deleteHandler"
+	remote_ip := get_remote_ip(r)
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	//连接db
+	var conn *pgx.Conn
+	conn, err := pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg = "连接db失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := "DELETE FROM parameter_bak_template WHERE id = $1 RETURNING content"
+	row, err := conn.Query(sql, r.FormValue("id"))
+	if err != nil {
+		error_msg = "删除失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	content := ""
+	if row.Next() {
+		err = row.Scan(&content)
+		if err != nil {
+			error_msg = "删除失败,详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		go write_log(remote_ip, modlename, username, "Log", content)
+
+	} else {
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+	}
+	return
+}
+
+/*
+功能描述：参数配置--提交参数,提交后可以只保存,可以reload,也可以restart，另外也可以保存为模板，给后面其它节点使用
 
 参数说明：
 w   -- http.ResponseWriter
@@ -1334,7 +1590,7 @@ func parameter_saveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//判断act值是否非法
-	if r.FormValue("act") != "save" && r.FormValue("act") != "reload" && r.FormValue("act") != "restart" {
+	if r.FormValue("act") != "save" && r.FormValue("act") != "reload" && r.FormValue("act") != "restart" && r.FormValue("act") != "saveas_template" {
 		error_msg = "执行方式值非法 [ " + r.FormValue("act") + " ]"
 		OutputJson(w, "FAIL", error_msg, 0)
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
@@ -1351,19 +1607,34 @@ func parameter_saveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//另存为模板
+	if r.FormValue("act") == "saveas_template" {
+		go parameter_save_bak_template(id, username, r.FormValue("parameter_file_name"), r.FormValue("parameter_file_contents"), "template", r.FormValue("remark"), remote_ip, row)
+		logcontent := "另存为模板成功\nnode_id [ " + r.FormValue("id") + " ]\n参数文件[ " + r.FormValue("parameter_file_name") + " ]\n写入内容 [ " + r.FormValue("parameter_file_contents") + " ]"
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		return
+	}
+
 	parameter_file_name := row.Pg_data + r.FormValue("parameter_file_name")
-	cmd := "cp " + parameter_file_name + " " + parameter_file_name + ".pgclusteradmin.bak" + ";echo \"" + r.FormValue("parameter_file_contents") + "\" > " + parameter_file_name
-	_, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+	cmd := "cp " + parameter_file_name + " " + parameter_file_name + ".pgclusteradmin.bak"
+	cmd = cmd + ";echo \"" + r.FormValue("parameter_file_contents") + "\" > " + parameter_file_name
+	cmd = cmd + ";cat " + parameter_file_name + ".pgclusteradmin.bak"
+
+	stdout, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 	if stderr != "" {
 		error_msg = "保存配置文件内容出错,详情：" + stderr
 		OutputJson(w, "FAIL", error_msg, 0)
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 		return
 	}
-	logcontent := "切换成功\nnode_id [ " + r.FormValue("id") + " ]\n参数文件[ " + r.FormValue("parameter_file_name") + " ]\n写入内容 [ " + r.FormValue("parameter_file_contents") + " ]"
+	//备份参数文件
+	go parameter_save_bak_template(id, username, r.FormValue("parameter_file_name"), stdout, "bak", r.FormValue("remark"), remote_ip, row)
+
+	logcontent := "保存成功\nnode_id [ " + r.FormValue("id") + " ]\n参数文件[ " + r.FormValue("parameter_file_name") + " ]\n写入内容 [ " + r.FormValue("parameter_file_contents") + " ]"
 	if r.FormValue("act") == "save" {
 		OutputJson(w, "SUCCESS", "执行成功！", 0)
-		go write_log(remote_ip, modlename, username, "Log,", logcontent)
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
 		return
 	}
 	//判断是否需要reload或者restart
@@ -1383,6 +1654,63 @@ func parameter_saveHandler(w http.ResponseWriter, r *http.Request) {
 		go write_log(remote_ip, modlename, username, logtype, error_msg)
 		return
 	}
+}
+
+/*
+功能描述：备份配置文件，使用go routine调用
+
+参数说明：
+nodeid    -- 节点id号
+username  -- 操作员
+filename  -- 配置文件名
+content   -- 配置文件内容
+category  -- 类别bak或template
+remark    -- 备注
+remote_ip -- 访问ip
+row       -- Row结构类型
+返回值说明：无
+*/
+
+func parameter_save_bak_template(nodeid int, username string, filename string, content string, category string, remark string, remote_ip string, row Row) {
+	var error_msg string
+	modlename := "parameter_save_bak_template"
+
+	//连接db
+	var conn *pgx.Conn
+	conn, err := pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg = "连接db失败，详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	//获取节点的状态,其中包含了版本号
+	row_chan := make(chan Row)
+	go getnode_type_and_status(row_chan, row)
+	row = <-row_chan
+
+	sql := `
+    INSERT INTO parameter_bak_template
+    (
+        nodeid, createtime,
+		username, filename,
+		version,content,
+		category,remark
+    ) 
+    VALUES
+    (   
+        $1, now(),
+        $2, $3,
+        $4, $5,
+		$6, $7
+	)
+    `
+	_, err = conn.Exec(sql,
+		nodeid,
+		username, filename,
+		row.Pg_version, content,
+		category, remark)
 }
 
 /*

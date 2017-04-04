@@ -153,6 +153,31 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     COMMENT ON COLUMN log.modlename IS '模块名称';
     COMMENT ON COLUMN log.log_level IS '日志级别';
     COMMENT ON COLUMN log.remark IS '日志内容';
+	
+--存储pg参数文件内容多个版本和公用模板
+
+	CREATE TABLE parameter_bak_template
+	(
+	    id serial not null unique,
+	    nodeid integer not null,
+	    createtime timestamp not null default now(),
+	    username text not null,
+	    filename text not null,
+	    version  text not null,
+	    content  text not null,
+	    category text not null,
+	    remark   text not null
+	);
+	COMMENT ON TABLE parameter_bak_template IS '参数文件备份或者模板表';
+	COMMENT ON COLUMN parameter_bak_template.id IS '系统编号';
+	COMMENT ON COLUMN parameter_bak_template.nodeid IS '节点id号';
+	COMMENT ON COLUMN parameter_bak_template.createtime IS '备份日期';
+	COMMENT ON COLUMN parameter_bak_template.username IS '操作员账号';
+	COMMENT ON COLUMN parameter_bak_template.filename IS '文件名称';
+	COMMENT ON COLUMN parameter_bak_template.version IS '版本号';
+	COMMENT ON COLUMN parameter_bak_template.content IS '内容';
+	COMMENT ON COLUMN parameter_bak_template.category IS '类别，值为bak或者template';
+	COMMENT ON COLUMN parameter_bak_template.remark IS '备注';
 
 #### 下载pgclusteradmin所需要的go支持包
 
