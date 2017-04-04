@@ -109,6 +109,9 @@
 .icon-wakeup{
  background:url('icons/wakeup.jpg') no-repeat center center;
 }
+.icon-template{
+ background:url('icons/template.png') no-repeat center center;
+}
 
 .icon-mini-add{
 	background:url('icons/mini_add.png') no-repeat center center;
