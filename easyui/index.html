@@ -175,18 +175,28 @@
         <td align="center" width="120">版本号</td>
         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_version" id="parameter_pg_version" data-options="readonly:true"/></td> 
       </tr> 
-       <tr>
-         <td align="center" width="120">配置文件</td>    
-         <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="parameter_files" id="parameter_files" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label'" required="true"></select></td> 
-       </tr>
-       <tr>
-         <td align="center" width="120">文件内容</td>
-         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="parameter_file_contents" id="parameter_file_contents" data-options="readonly:false,multiline:true,height:350"></input></td> 
-       </tr>  
-	   <tr>
-         <td align="center" width="120">执行结果</td>
-         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="exec_result" id="parameter_exec_result" data-options="readonly:true,multiline:true,height:80"  ></input></td> 
-       </tr>  
+      <tr>
+        <td align="center" width="120">配置文件</td>    
+        <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="parameter_files" id="parameter_files" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label'" required="true"></select></td> 
+      </tr>
+	  <tr>
+        <td align="center" width="120">历史备份</td>    
+        <td><select class="easyui-combogrid textbox-default-width" name="parameter_files_bak" id="parameter_files_bak" ></select></td> 
+		<td align="center" width="120">模板文件</td>
+        <td><select class="easyui-combogrid textbox-default-width" name="parameter_files_template" id="parameter_files_template" ></select></td>
+      </tr>
+      <tr>
+        <td align="center" width="120">文件内容</td>
+        <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="parameter_file_contents" id="parameter_file_contents" data-options="readonly:false,multiline:true,height:290,required:true"></input></td> 
+      </tr>
+	  <tr>
+        <td align="center" width="120">备注</td>
+        <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="remark" id="parameter_remark" data-options="readonly:false,required:true"/></td>
+      </tr>  
+      <tr>
+        <td align="center" width="120">执行结果</td>
+        <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="exec_result" id="parameter_exec_result" data-options="readonly:true,multiline:true,height:80"  ></input></td> 
+      </tr>  
      </table>  
    </form>
  </div> 
@@ -195,6 +205,7 @@
     <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_save" data-options="iconCls:'icon-save',width:80">保存</a> 
     <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_reload" data-options="iconCls:'icon-reload',width:110">保存&reload</a>      
     <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_restart" data-options="iconCls:'icon-restart',width:110">保存&restart</a> 
+	<a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_saveas_template" data-options="iconCls:'icon-template',width:110">保存为模板</a>      
     <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>   
 <!--参数设置窗口-->
@@ -851,13 +862,15 @@ $(document).ready(function()
 			{
 				data.push({ "label": "recovery.conf", "value": "recovery.conf" });  
 			}
-		$("#parameter_files").combobox("loadData", data); 
+		row.remark = ""
+		$('#parameter_files').combobox("loadData", data); 
         $('#parameter_dialog_form').form('load',row);   
         $('#parameter_files').combobox('select','postgresql.conf');
     });
-    
+	
+    //绑定“配置文件”选择事件
     $('#parameter_files').combobox({'onSelect':function(record){parameter_file_load(record);}});
-    
+	
     //参数配置管理-保存
     $('#parameter_dialog_save').bind('click', function(){
         parameter_save('save');
@@ -872,14 +885,23 @@ $(document).ready(function()
     $('#parameter_dialog_restart').bind('click', function(){
         parameter_save('restart');
     }); 
+	
+	//参数配置管理-保存saveas_template
+    $('#parameter_dialog_saveas_template').bind('click', function(){
+        parameter_save('saveas_template');
+    }); 
     
     //提交配置的参数
     function parameter_save(act){
+		if ( $('#parameter_remark').textbox('getValue') == ""){
+			$.messager.alert('错误提示',"备注不能为空", 'error'); 
+			return;
+		}
         $.messager.progress();   
         $.ajax({        
                 type:"POST",
                 url:"/parameter_save/",
-                data:{'id':$('#parameter_id').textbox('getValue'),'parameter_file_name':$('#parameter_files').combobox('getValue'),'act':act,'parameter_file_contents':$('#parameter_file_contents').textbox('getValue')},
+                data:{'id':$('#parameter_id').textbox('getValue'),'parameter_file_name':$('#parameter_files').combobox('getValue'),'act':act,'parameter_file_contents':$('#parameter_file_contents').textbox('getValue'),'remark':$('#parameter_remark').textbox('getValue')},
                 success:function(result){
                     $.messager.progress('close');   
                     if (result.return_code=="FAIL")                               
@@ -901,17 +923,19 @@ $(document).ready(function()
 					                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
 					                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
 										} 
+									//重新加载备份和模板文件列表 
+									parameter_files_refresh();
                                 }
                         }
                     else
                         {      
-						    if (act == "save")
+						    if (act == "save" || act == "saveas_template")
 							    {
-									alertmsg = "执行成功"
+									alertmsg = "执行成功";
 								}
 							else
 								{
-									alertmsg = "执行成功,详情见 [ 执行结果 ] 输出框"
+									alertmsg = "执行成功,详情见 [ 执行结果 ] 输出框";
 									$('#parameter_exec_result').textbox('setValue',result.return_msg);   
 								}	
                             $.messager.alert('系统提示',alertmsg, 'info');  
@@ -923,7 +947,9 @@ $(document).ready(function()
 			                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
 			                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
 								}
-                        }  
+							//重新加载备份和模板文件列表 
+							parameter_files_refresh();
+                        }
                 },
                 dataType:"json"
             });      
@@ -950,6 +976,9 @@ $(document).ready(function()
                             else
                                 {
                                     $.messager.alert('错误提示',result.return_msg, 'error');   
+									//重新加载备份和模板文件列表 
+									parameter_files_refresh();	  
+									
                                 }
                         }
                     else
@@ -957,11 +986,58 @@ $(document).ready(function()
 							s = result.parameter_file_conetens;
 							s = s.substring(0,s.length-1);
                             $('#parameter_file_contents').textbox('setValue',s);  
-                        }  
+							//重新加载备份和模板文件列表 
+							parameter_files_refresh();
+                        }
                 },
                 dataType:"json"
             });      
     }
+	
+	//刷新历史备份和模板文件列表
+	function parameter_files_refresh(){
+		$('#parameter_files_bak').combogrid({url: '/parameter_bak_template_list/?id=' + $('#parameter_id').textbox('getValue') + "&filename=" + $('#parameter_files').combobox('getValue') + "&category=bak"});    
+		$('#parameter_files_template').combogrid({url: '/parameter_bak_template_list/?id=' + $('#parameter_id').textbox('getValue') + "&filename=" + $('#parameter_files').combobox('getValue') + "&category=template"});    
+	}
+	//历史备份选择框列表属性设置       
+    $('#parameter_files_bak').combogrid({
+		editable:false,
+        panelWidth: 705,
+		panelHeight: 300,
+		idField: 'id',
+		textField: 'remark',
+		method: 'get',
+		columns: [[
+			{field:'id',title:'Id号',width:55,align:'center'},
+			{field:'createtime',title:'备份时间',width:150,align:'left'},
+			{field:'username',title:'操作员',width:150,align:'left'},
+			{field:'remark',title:'备注',width:150,align:'left'},
+			{field:'version',title:'PG版本号',width:200,align:'left'},
+			{field:'import',title:'导入',width:50,align:'center',formatter:function(value,rec,index){return "<a href=\"#\" onclick=\"parameter_files_bak_template_load('bak',"+rec.id+","+index+")\">导入</a> ";}},
+			{field:'delete',title:'删除',width:50,align:'center',formatter:function(value,rec,index){return "<a href=\"#\" onclick=\"parameter_files_bak_template_delete('bak',"+rec.id+","+index+")\">删除</a> ";}}
+		]],
+		fitColumns: true
+    });  
+	
+	//模板文件选择框列表属性设置       
+    $('#parameter_files_template').combogrid({
+		editable:false,
+        panelWidth: 705,
+		panelHeight: 300,
+		idField: 'id',
+		textField: 'remark',
+		method: 'get',
+		columns: [[
+			{field:'id',title:'Id号',width:55,align:'center'},
+			{field:'createtime',title:'创建时间',width:150,align:'left'},
+			{field:'username',title:'操作员',width:150,align:'left'},
+			{field:'remark',title:'备注',width:150,align:'left'},
+			{field:'version',title:'PG版本号',width:150,align:'left'},
+			{field:'import',title:'导入',width:50,align:'center',formatter:function(value,rec,index){return "<a href=\"#\" onclick=\"parameter_files_bak_template_load('template',"+rec.id+","+index+")\">导入</a> ";}},
+			{field:'delete',title:'删除',width:50,align:'center',formatter:function(value,rec,index){return "<a href=\"#\" onclick=\"parameter_files_bak_template_delete('template',"+rec.id+","+index+")\">删除</a> ";}}
+		]],
+		fitColumns: true
+    });  
     
     //参数配置－－取消按钮
     $('#parameter_dialog_cancel').bind('click', function(){
@@ -1642,6 +1718,79 @@ $.parser.onComplete = function(){
     pc = setTimeout(closes, 500);
 } 
 
+//删除备份或者模板文件
+function parameter_files_bak_template_delete(category,id,rowindex){
+	if (category == "bak"){
+		var g = $('#parameter_files_bak').combogrid('grid');
+	} else {
+		var g = $('#parameter_files_template').combogrid('grid');
+	}
+	$.ajax({        
+	            type:"POST",
+	            url:"/parameter_files_bak_template_delete/",
+	            data:{'id':id},
+	            success:function(result){
+	                if (category == "bak"){
+						$('#parameter_files_bak').combogrid('clear');
+					}else{
+						$('#parameter_files_template').combogrid('clear');
+					}   
+					$.messager.progress('close'); 
+	                if (result.return_code=="FAIL")                               
+	                    {                       
+	                        if ( result.show_login_dialog == 1)
+	                            {   
+									$('#parameter_dialog').dialog('close');
+	                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+	                            }
+	                        else
+	                            {
+	                                $.messager.alert('错误提示',result.return_msg, 'error');   
+	                            }
+	                    }
+	                else
+	                    {      
+							$.messager.alert('系统提示','删除成功', 'info'); 
+							g.datagrid('deleteRow',rowindex);
+	                    }
+	            },
+	            dataType:"json"
+           }); 
+}
+
+//参数配置管理-获取历史文件内容
+function parameter_files_bak_template_load(category,id,rowindex) {
+    if ($('#parameter_id').textbox('getValue') == "") return ;
+    $.messager.progress();   
+    $('#parameter_file_contents').textbox('setValue',"数据加载中...");
+    $.ajax({        
+	            type:"POST",
+	            url:"/parameter_get_bak_template_contents/",
+	            data:{'id':id},
+	            success:function(result){
+	                $.messager.progress('close');   
+	                if (result.return_code=="FAIL")                               
+	                    {                       
+	                        if ( result.show_login_dialog == 1)
+	                            {   
+									$('#parameter_dialog').dialog('close');
+	                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+	                            }
+	                        else
+	                            {
+	                                $.messager.alert('错误提示',result.return_msg, 'error');   
+	                            }
+	                    }
+	                else
+	                    {      
+							s = result.parameter_file_conetens;
+							s = s.substring(0,s.length-1);
+				            $('#parameter_file_contents').textbox('setValue',s);  
+		                }  
+	            },
+	            dataType:"json"
+        });      
+}
 
 </script>
 </body>
