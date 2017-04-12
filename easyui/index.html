@@ -44,7 +44,8 @@
  <thead>
    <tr> 
      <th data-options="field:'host',width:'130px'">主机名或IP</th> 
-     <th data-options="field:'ssh_port',width:'80px'">SSH端口号</th>    
+     <th data-options="field:'ssh_port',width:'80px'">SSH端口号</th>
+	 <th data-options="field:'ssh_authmethod',width:'80px'">SSH认证方式</th>        
      <th data-options="field:'ssh_user',width:'100px'">SSH用户名</th> 
      <th data-options="field:'pg_bin',width:'200px'">PG服务端程序路径</th>
      <th data-options="field:'pg_data',width:'200px'">PGDATA所在路径</th>
@@ -56,6 +57,7 @@
      <th data-options="field:'master_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
      <th data-options="field:'slave_vip',width:'100px'">做为备节点时绑定VIP</th>
      <th data-options="field:'slave_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
+	 <th data-options="field:'bind_vip_authmethod',width:'80px'">绑定网卡SSH认证方法</th>    
      <th data-options="field:'bind_vip_user',width:'100px'">绑定网卡操作用户</th>
      <th data-options="field:'remark',width:'200px'">备注</th>  
    </tr>
@@ -76,7 +78,7 @@
 </div>
 
 <!--修改资料窗口-->
-<div id="update_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#update_dialog_buttons',closed:true,height:568,closable:true"> <!--modal是遮罩层--> 
+<div id="update_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#update_dialog_buttons',closed:true,height:618,closable:true"> <!--modal是遮罩层--> 
  <div style="padding:30px 5px 5px 10px">      
    <form id="update_dialog_form" method="post"> 
      <table cellpadding="3" width="99%">
@@ -91,12 +93,16 @@
           <td><input class="easyui-textbox textbox-default-width" name="host" data-options="required:true" /></td>
           <td align="center" width="120">SSH端口号</td>
           <td><input class="easyui-numberbox textbox-default-width" name="ssh_port" data-options="required:true,min:1,precision:0"/></td>
+        </tr>
+        <tr>
+          <td align="center" width="120">SSH认证方式</td>
+          <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="ssh_authmethod" id="update_ssh_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
         </tr> 
         <tr>
           <td align="center">SSH用户名</td>
           <td><input class="easyui-textbox textbox-default-width" name="ssh_user" data-options="required:true"/></td>
           <td align="center">SSH登录密码</td>
-          <td><input class="easyui-passwordbox textbox-default-width" name="ssh_password" id="update_ssh_password" iconWidth="28" data-options="required:true"/></td>
+          <td><input class="easyui-passwordbox textbox-default-width" name="ssh_password" id="update_ssh_password" iconWidth="28" data-options="required:false"/></td>
         </tr> 
         <tr>
           <td align="center" width="120">PG服务端程序路径</td>
@@ -105,8 +111,8 @@
         <tr>
           <td align="center" width="120">PGDATA所在路径</td>
           <td colspan="3"><select class="easyui-textbox  textbox-default-width-long" name="pg_data" data-options="required:true"/></td> 
-        </tr> 
-		<tr>
+        </tr>
+        <tr>
           <td align="center" width="120">访问日志保存路径</td>
           <td colspan="3"><select class="easyui-textbox  textbox-default-width-long" name="pg_log" data-options="required:false"/></td> 
         </tr> 
@@ -133,6 +139,10 @@
           <td><input class="easyui-textbox textbox-default-width" name="slave_vip" data-options="required:false,validType:['isip']"/></td>
           <td align="center">VIP绑定设备号</td>
           <td><input class="easyui-textbox textbox-default-width" name="slave_vip_networkcard" data-options="required:false,prompt:'如eth0:1'"/></td>
+        </tr>
+        <tr>
+          <td align="center" width="120">绑定网卡登录认证方式</td>
+          <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="bind_vip_authmethod" id="update_bind_vip_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
         </tr> 
         <tr>
           <td align="center">绑定网卡操作用户</td>
@@ -211,7 +221,7 @@
 <!--参数设置窗口-->
 
 <!--服务管理窗口-->
-<div id="serviceadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#serviceadmin_dialog_buttons',closed:true,height:588,closable:true"> <!--modal是遮罩层--> 
+<div id="serviceadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#serviceadmin_dialog_buttons',closed:true,height:618,closable:true"> <!--modal是遮罩层--> 
  <div style="padding:30px 5px 5px 10px">      
    <form id="serviceadmin_dialog_form" method="post"> 
        <table cellpadding="3" width="99%">
@@ -237,11 +247,15 @@
             <td align="center" width="120">SSH端口号</td>
             <td><input class="easyui-numberbox textbox-default-width" name="ssh_port" data-options="readonly:true"/></td>
           </tr> 
+		  <tr>
+            <td align="center" width="120">SSH认证方式</td>
+            <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="ssh_authmethod" data-options="readonly:true,editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
+          </tr> 
           <tr>
             <td align="center">SSH用户名</td>
             <td><input class="easyui-textbox textbox-default-width" name="ssh_user" data-options="readonly:true"/></td>
             <td align="center">SSH登录密码</td>
-            <td><input class="easyui-passwordbox textbox-default-width" name="ssh_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
+            <td><input class="easyui-passwordbox textbox-default-width" name="ssh_password" iconWidth="28" data-options="readonly:false,required:false"/></td>
           </tr> 
           <tr>
             <td align="center" width="120">PG服务端程序路径</td>
@@ -322,19 +336,23 @@
             <td align="center">网卡设备号</td>
             <td><input class="easyui-textbox textbox-default-width" name="vip_networkcard" data-options="readonly:false,required:true,prompt:'如eth0:1'"/></td>
           </tr>  
+		  <tr>
+            <td align="center" width="120">绑定网卡登录认证方式</td>
+            <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="bind_vip_authmethod" id="vipadmin_bind_vip_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
+          </tr> 
           <tr>
             <td align="center">绑定操作用户名</td>
-            <td><input class="easyui-textbox textbox-default-width" name="bind_vip_user" data-options="readonly:false,required:true"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="bind_vip_user" id="vipadmin_bind_vip_user" data-options="readonly:false,required:true"/></td>
             <td align="center">操作用户密码</td>
-            <td><input class="easyui-passwordbox textbox-default-width" name="bind_vip_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
+            <td><input class="easyui-passwordbox textbox-default-width" name="bind_vip_password" id="vipadmin_bind_vip_password" iconWidth="28" data-options="readonly:false,required:true"/></td>
           </tr> 
           <tr>
             <td align="center" width="120">IP绑定详情</td>
-            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="vipadmin_ip_status" id="vipadmin_ip_status" data-options="readonly:true,multiline:true,height:180"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="vipadmin_ip_status" id="vipadmin_ip_status" data-options="readonly:true,multiline:true,height:160"  ></input></td> 
           </tr> 
           <tr>
             <td align="center" width="120">执行结果</td>
-            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="vipadmin_exec_result" id="vipadmin_exec_result" data-options="readonly:true,multiline:true,height:60"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="vipadmin_exec_result" id="vipadmin_exec_result" data-options="readonly:true,multiline:true,height:50"  ></input></td> 
           </tr>   
           <tr>
              <td align="center" width="120">操作说明</td>
@@ -393,11 +411,15 @@
             <td align="center">绑定网卡设备号</td>
             <td><input class="easyui-textbox textbox-default-width" name="vip_networkcard" data-options="readonly:false,required:false,prompt:'如eth0:1'"/></td>
           </tr>  
+		        <tr>
+            <td align="center" width="120">绑定网卡登录认证方式</td>
+            <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="bind_vip_authmethod" id="slave_wakeup_bind_vip_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
+          </tr> 
           <tr>
             <td align="center">绑定操作用户名</td>
-            <td><input class="easyui-textbox textbox-default-width" name="bind_vip_user" data-options="readonly:false,required:false"/></td>
+            <td><input class="easyui-textbox textbox-default-width" name="bind_vip_user" id="slave_wakeup_bind_vip_user" data-options="readonly:false,required:false"/></td>
             <td align="center">操作用户密码</td>
-            <td><input class="easyui-passwordbox textbox-default-width" name="bind_vip_password" iconWidth="28" data-options="readonly:false,required:false"/></td>
+            <td><input class="easyui-passwordbox textbox-default-width" name="bind_vip_password" id="slave_wakeup_bind_vip_password" iconWidth="28" data-options="readonly:false,required:false"/></td>
           </tr> 
           <tr>
             <td align="center">唤醒后执行VACUUM</td>
@@ -405,11 +427,11 @@
           </tr> 
           <tr>
             <td align="center" width="120">IP绑定详情</td>
-            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_wakeup_ip_status" id="slave_wakeup_ip_status" data-options="readonly:true,multiline:true,height:180"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_wakeup_ip_status" id="slave_wakeup_ip_status" data-options="readonly:true,multiline:true,height:160"  ></input></td> 
           </tr> 
           <tr>
             <td align="center" width="120">执行结果</td>
-            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_wakeup_exec_result" id="slave_wakeup_exec_result" data-options="readonly:true,multiline:true,height:60"  ></input></td> 
+            <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_wakeup_exec_result" id="slave_wakeup_exec_result" data-options="readonly:true,multiline:true,height:50"  ></input></td> 
           </tr>   
           <tr>
              <td align="center" width="120">操作说明</td>
@@ -453,6 +475,10 @@
              <td><input class="easyui-textbox textbox-default-width" name="master_host" data-options="readonly:true" /></td>
              <td align="center" width="120">SSH端口号</td>
              <td><input class="easyui-numberbox textbox-default-width" name="master_ssh_port" data-options="readonly:true"/></td>
+           </tr>
+           <tr>
+            <td align="center" width="120">SSH认证方式</td>
+            <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="master_ssh_authmethod" data-options="readonly:true,editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
            </tr> 
            <tr>
              <td align="center">SSH用户名</td>
@@ -466,7 +492,7 @@
            </tr> 
            <tr>
              <td align="center" width="120">PGDATA所在路径</td>
-             <td colspan="3"><select class="easyui-textbox textbox-default-width" name="master_pg_data" id="master_pg_data" data-options="readonly:true"/></td> 
+             <td colspan="3"><select class="easyui-textbox textbox-default-width-long" name="master_pg_data" id="master_pg_data" data-options="readonly:true"/></td> 
            </tr> 
            <tr>
              <td align="center">PG服务端口号</td>
@@ -482,7 +508,7 @@
            </tr>  
            <tr>
              <td align="center" width="120">IP绑定详情</td>
-             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="master_ip_status" id="master_ip_status" data-options="readonly:true,multiline:true,height:240"></input></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="master_ip_status" id="master_ip_status" data-options="readonly:true,multiline:true,height:210"></input></td> 
            </tr>   
          </table> 
        </div>
@@ -509,7 +535,11 @@
              <td><input class="easyui-textbox textbox-default-width" name="slave_host" data-options="readonly:true" /></td>
              <td align="center" width="120">SSH端口号</td>
              <td><input class="easyui-numberbox textbox-default-width" name="slave_ssh_port" data-options="readonly:true"/></td>
-           </tr> 
+           </tr>
+           <tr>
+            <td align="center" width="120">SSH认证方式</td>
+            <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="slave_ssh_authmethod" data-options="readonly:true,editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
+           </tr>  
            <tr>
              <td align="center">SSH用户名</td>
              <td><input class="easyui-textbox textbox-default-width" name="slave_ssh_user" data-options="readonly:true"/></td>
@@ -538,7 +568,7 @@
            </tr>  
            <tr>
              <td align="center" width="120">IP绑定详情</td>
-             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_ip_status" id="slave_ip_status" data-options="readonly:true,multiline:true,height:240"></input></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="slave_ip_status" id="slave_ip_status" data-options="readonly:true,multiline:true,height:210"></input></td> 
            </tr>  
          </table>  
        </div>
@@ -550,21 +580,25 @@
            </tr>  
            <tr>
              <td align="center" width="120">主节点切为备节点参数</td> 
-             <td colspan="3" height="40"><div class="datagrid-toolbar c6"></div></td>
+             <td colspan="3" height="20"><div class="datagrid-toolbar c6"></div></td>
            </tr>     
            <tr>
              <td align="center" width="120">切换前解绑vip</td>
              <td><input class="easyui-textbox textbox-default-width" name="master_unbind_vip" id="master_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_bind_vip\']','master_slave_vip_equal[\'#slave_unbind_vip\']']"/></td>
              <td align="center" width="120">解绑网卡设备号</td>
-             <td><input class="easyui-textbox textbox-default-width" name="master_unbind_vip_networkcard" id="master_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_unbind_vip_networkcard" id="master_unbind_vip_networkcard" data-options="required:false,readonly:false,prompt:'如eth0'"/></td>
            </tr>
            <tr>
              <td align="center" width="120">切换后绑定vip</td>
              <td><input class="easyui-textbox textbox-default-width" name="master_bind_vip" id="master_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#master_unbind_vip\']','master_slave_vip_equal[\'#slave_bind_vip\']']"/></td>
              <td align="center" width="120">绑定网卡设备号</td>
-             <td><input class="easyui-textbox textbox-default-width" name="master_bind_vip_networkcard" id="master_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="master_bind_vip_networkcard" id="master_bind_vip_networkcard" data-options="required:false,readonly:false,prompt:'如eth0'"/></td>
            </tr>
-            <tr>
+           <tr>
+             <td align="center" width="120">绑定网卡登录认证方式</td>
+             <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="master_bind_vip_authmethod" id="master_bind_vip_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
+           </tr> 
+           <tr>
              <td align="center" width="120">绑定操作用户</td>
              <td><input class="easyui-textbox textbox-default-width" name="master_bind_user" id="master_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
              <td align="center" width="120">操作用户密码</td>
@@ -572,20 +606,24 @@
            </tr>
            <tr>
              <td align="center" width="120">备节点切为主节点参数</td> 
-             <td colspan="3" height="40"><div class="datagrid-toolbar c6"></div></td>
+             <td colspan="3" height="20"><div class="datagrid-toolbar c6"></div></td>
            </tr>       
            <tr>
              <td align="center" width="120">切换前解绑vip</td>
              <td><input class="easyui-textbox textbox-default-width" name="slave_unbind_vip" id="slave_unbind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_bind_vip\']','master_slave_vip_equal[\'#master_unbind_vip\']']"/></td>
              <td align="center" width="120">解绑网卡设备号</td>
-             <td><input class="easyui-textbox textbox-default-width" name="slave_unbind_vip_networkcard" id="slave_unbind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_unbind_vip_networkcard" id="slave_unbind_vip_networkcard" data-options="required:false,readonly:false,prompt:'如eth0:1'"/></td>
            </tr>
            <tr>
              <td align="center" width="120">切换后绑定vip</td>
              <td><input class="easyui-textbox textbox-default-width" name="slave_bind_vip" id="slave_bind_vip" data-options="required:false,validType:['isip','bind_unbind_vip_equal[\'#slave_unbind_vip\']','master_slave_vip_equal[\'#master_bind_vip\']']"/></td>
              <td align="center" width="120">绑定网卡设备号</td>
-             <td><input class="easyui-textbox textbox-default-width" name="slave_bind_vip_networkcard" id="slave_bind_vip_networkcard" data-options="readonly:false,prompt:'如eth0:1'"/></td>
+             <td><input class="easyui-textbox textbox-default-width" name="slave_bind_vip_networkcard" id="slave_bind_vip_networkcard" data-options="required:false,readonly:false,prompt:'如eth0:1'"/></td>
            </tr>
+           <tr>
+             <td align="center" width="120">绑定网卡登录认证方式</td>
+             <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="slave_bind_vip_authmethod" id="slave_bind_vip_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
+           </tr> 
            <tr>
              <td align="center" width="120">绑定操作用户</td>
              <td><input class="easyui-textbox textbox-default-width" name="slave_bind_user" id="slave_bind_user" data-options="required:false,prompt:'一般只有root有绑定vip的权限'"/></td>
@@ -597,7 +635,7 @@
            </tr>
            <tr>
              <td align="center" width="120">执行结果</td>
-             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="promote_exec_result" id="promote_exec_result" data-options="readonly:true,multiline:true,height:90"></input></td> 
+             <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="promote_exec_result" id="promote_exec_result" data-options="readonly:true,multiline:true,height:80"></input></td> 
            </tr> 
            <tr>
              <td colspan="4" height="10"></td>
@@ -728,7 +766,7 @@ $(document).ready(function()
     $('#cy_insert_click').bind('click', function(){      
         $('#update_dialog').dialog('open').dialog('center').dialog('setTitle','增加一个节点资料');  
         $('#update_dialog_form').form('clear'); 
-        $('#update_dialog_form').form('load',{'ssh_port':'22','ssh_user':'postgres','pg_bin':'/usr/local/pgsql/bin/','pg_data':'/home/postgres/data/','pg_port':'5432','pg_database':'template1','pg_user':'postgres'});   
+        $('#update_dialog_form').form('load',{'ssh_port':'22','ssh_user':'postgres','pg_bin':'/usr/local/pgsql/bin/','pg_data':'/home/postgres/data/','pg_port':'5432','pg_database':'template1','pg_user':'postgres','ssh_authmethod':'key','bind_vip_authmethod':'key'});   
         url="./insertnode/";
     }); 
     
@@ -785,7 +823,29 @@ $(document).ready(function()
                     } 
            }
         });         
-    }); 
+    });
+	 
+	//SSH认证方式选择时设置是否需要录入密码
+	$('#update_ssh_authmethod').combobox({onSelect: function(rec){ssh_authmethod_onselect(rec)}});
+	function ssh_authmethod_onselect(rec){
+		var val = $('#update_ssh_password').passwordbox('getValue');
+		if (rec.value == "password") {
+			$('#update_ssh_password').passwordbox({value:val,'required':true});
+		}else{
+			$('#update_ssh_password').passwordbox({value:val,'required':false});
+		}
+	}
+	
+	//绑定网卡登录认证方式选择时设置是否需要录入密码
+	$('#update_bind_vip_authmethod').combobox({onSelect: function(rec){bind_vip_authmethod_onselect(rec)}});
+	function bind_vip_authmethod_onselect(rec){
+		var val = $('#update_bind_vip_password').passwordbox('getValue');
+		if (rec.value == "password") {
+			$('#update_bind_vip_password').passwordbox({value:val,'required':true});
+		}else{
+			$('#update_bind_vip_password').passwordbox({value:val,'required':false});
+		}
+	}
     
     //修改节点资料－－取消按钮
     $('#update_dialog_cancel').bind('click', function(){
@@ -1178,13 +1238,24 @@ $(document).ready(function()
         $('#vipadmin_dialog_form').form('load',row);   
         $('#vipadmin_dialog_ip_refresh').click();
     }); 
+	
+	//绑定网卡登录认证方式选择时设置是否需要录入密码
+	$('#vipadmin_bind_vip_authmethod').combobox({onSelect: function(rec){vipadmin_bind_vip_authmethod_onselect(rec)}});
+	function vipadmin_bind_vip_authmethod_onselect(rec){
+		var val = $('#vipadmin_bind_vip_password').passwordbox('getValue');
+		if (rec.value == "password") {
+			$('#vipadmin_bind_vip_password').passwordbox({value:val,'required':true});
+		}else{
+			$('#vipadmin_bind_vip_password').passwordbox({value:val,'required':false});
+		}
+	}
     
     //vip管理－－绑定按钮
     $('#vipadmin_dialog_bind').bind('click', function(){
         vipadmin("bind")
     });
     
-    //vip管理－－绑定按钮
+    //vip管理－－解绑按钮
     $('#vipadmin_dialog_unbind').bind('click', function(){
         vipadmin("unbind")
     });
@@ -1292,6 +1363,17 @@ $(document).ready(function()
         $('#slave_wakeup_dialog_ip_refresh').click();
 		$('#slave_wakeup_dialog_run').linkbutton("enabled");  
     }); 
+	
+	//绑定网卡登录认证方式选择时设置是否需要录入密码
+	$('#slave_wakeup_bind_vip_authmethod').combobox({onSelect: function(rec){slave_wakeup_bind_vip_authmethod_onselect(rec)}});
+	function slave_wakeup_bind_vip_authmethod_onselect(rec){
+		var val = $('#slave_wakeup_bind_vip_password').passwordbox('getValue');
+		if (rec.value == "password") {
+			$('#slave_wakeup_bind_vip_password').passwordbox({value:val,'required':true});
+		}else{
+			$('#slave_wakeup_bind_vip_password').passwordbox({value:val,'required':false});
+		}
+	}
     
     //唤醒管理--执行操作
     $('#slave_wakeup_dialog_run').bind('click', function() {
@@ -1420,6 +1502,7 @@ $(document).ready(function()
             'master_pg_version':master_row.pg_version,
             'master_host':master_row.host,
             'master_ssh_port':master_row.ssh_port,
+			'master_ssh_authmethod':master_row.ssh_authmethod,
             'master_ssh_user':master_row.ssh_user,
             'master_ssh_password':master_row.ssh_password,
             'master_pg_bin':master_row.pg_bin,
@@ -1432,6 +1515,7 @@ $(document).ready(function()
             'master_unbind_vip_networkcard':master_row.master_vip_networkcard,
             'master_bind_vip':master_row.slave_vip,
             'master_bind_vip_networkcard':master_row.slave_vip_networkcard,
+			'master_bind_vip_authmethod':master_row.bind_vip_authmethod,
             'master_bind_user':master_row.bind_vip_user,
             'master_bind_password':master_row.bind_vip_password,
             'slave_id':slave_row.id,
@@ -1441,6 +1525,7 @@ $(document).ready(function()
             'slave_pg_version':slave_row.pg_version,
             'slave_host':slave_row.host,
             'slave_ssh_port':slave_row.ssh_port,
+			'slave_ssh_authmethod':slave_row.ssh_authmethod,
             'slave_ssh_user':slave_row.ssh_user,
             'slave_ssh_password':slave_row.ssh_password,
             'slave_pg_bin':slave_row.pg_bin,
@@ -1453,6 +1538,7 @@ $(document).ready(function()
             'slave_unbind_vip_networkcard':slave_row.slave_vip_networkcard,
             'slave_bind_vip':slave_row.master_vip,
             'slave_bind_vip_networkcard':slave_row.master_vip_networkcard,
+			'slave_bind_vip_authmethod':slave_row.bind_vip_authmethod,
             'slave_bind_user':slave_row.bind_vip_user,
             'slave_bind_password':slave_row.bind_vip_password,
             'recovery_conf':recovery_conf
@@ -1539,42 +1625,50 @@ $(document).ready(function()
                 $('#promote_tabs').tabs('select',2);  
                 var master_unbind_vip = $('#master_unbind_vip').textbox('getValue');
                 if (master_unbind_vip!=""){
-                     $('#master_unbind_vip_networkcard').textbox({'required':true});
+					$('#master_unbind_vip_networkcard').textbox({'required':true});
                 }else{
-                     $('#master_unbind_vip_networkcard').textbox({'required':false});
+                    $('#master_unbind_vip_networkcard').textbox({'required':false});
                 }   
                 var master_bind_vip = $('#master_bind_vip').textbox('getValue');
                 if (master_bind_vip!=""){
-                     $('#master_bind_vip_networkcard').textbox({'required':true});
+                    $('#master_bind_vip_networkcard').textbox({'required':true});
                 }else{
-                     $('#master_bind_vip_networkcard').textbox({'required':false});
+                    $('#master_bind_vip_networkcard').textbox({'required':false});
                 }   
                 if (master_unbind_vip!="" || master_bind_vip!=""){
-                     $('#master_bind_user').textbox({'required':true});    
-                     $('#master_bind_password').passwordbox({'value':$('#master_bind_password').passwordbox('getValue'),'required':true});    
+                    $('#master_bind_user').textbox({'required':true});    
+					if ($('#master_bind_vip_authmethod').combobox('getValue')=="password"){
+						$('#master_bind_password').passwordbox({'value':$('#master_bind_password').passwordbox('getValue'),'required':true});    
+					}else{
+						$('#master_bind_password').passwordbox({'value':$('#master_bind_password').passwordbox('getValue'),'required':false});    
+					} 
                 }else{
-                     $('#master_bind_user').textbox({'required':false});    
-                     $('#master_bind_password').passwordbox({'required':false});   
+                    $('#master_bind_user').textbox({'required':false});    
+                    $('#master_bind_password').passwordbox({'value':$('#master_bind_password').passwordbox('getValue'),'required':false});   
                 }
                 
                 var slave_unbind_vip = $('#slave_unbind_vip').textbox('getValue');
                 if (slave_unbind_vip!=""){
-                     $('#slave_unbind_vip_networkcard').textbox({'required':true});
+                    $('#slave_unbind_vip_networkcard').textbox({'required':true});
                 }else{
-                     $('#slave_unbind_vip_networkcard').textbox({'required':false});
+                    $('#slave_unbind_vip_networkcard').textbox({'required':false});
                 }   
                 var slave_bind_vip = $('#slave_bind_vip').textbox('getValue');
                 if (slave_bind_vip!=""){
-                     $('#slave_bind_vip_networkcard').textbox({'required':true});
+                    $('#slave_bind_vip_networkcard').textbox({'required':true});
                 }else{
-                     $('#slave_bind_vip_networkcard').textbox({'required':false});
+                    $('#slave_bind_vip_networkcard').textbox({'required':false});
                 }   
                 if (slave_unbind_vip!="" || slave_bind_vip!=""){
-                     $('#slave_bind_user').textbox({'required':true});    
-                     $('#slave_bind_password').passwordbox({'value':$('#slave_bind_password').passwordbox('getValue'),'required':true});    
+                    $('#slave_bind_user').textbox({'required':true});    
+					if ($('#slave_bind_vip_authmethod').combobox('getValue')=="password"){
+						$('#slave_bind_password').passwordbox({'value':$('#slave_bind_password').passwordbox('getValue'),'required':true});    
+					}else{
+						$('#slave_bind_password').passwordbox({'value':$('#slave_bind_password').passwordbox('getValue'),'required':false});    
+					}
                 }else{
-                     $('#slave_bind_user').textbox({'required':false});    
-                     $('#slave_bind_password').passwordbox({'required':false});    
+                    $('#slave_bind_user').textbox({'required':false});    
+                    $('#slave_bind_password').passwordbox({'value':$('#slave_bind_password').passwordbox('getValue'),'required':false});    
                 }
                 
                 var isValid = $(this).form('validate');     

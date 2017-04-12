@@ -37,6 +37,7 @@ type Row struct {
 	Ssh_port               int    `json:"ssh_port"`
 	Ssh_user               string `json:"ssh_user"`
 	Ssh_password           string `json:"ssh_password"`
+	Ssh_authmethod         string `json:"ssh_authmethod"`
 	Pg_bin                 string `json:"pg_bin"`
 	Pg_data                string `json:"pg_data"`
 	Pg_log                 string `json:"pg_log"`
@@ -50,6 +51,7 @@ type Row struct {
 	Slave_vip_networkcard  string `json:"slave_vip_networkcard"`
 	Bind_vip_user          string `json:"bind_vip_user"`
 	Bind_vip_password      string `json:"bind_vip_password"`
+	Bind_vip_authmethod    string `json:"bind_vip_authmethod"`
 	Remark                 string `json:"remark"`
 	Return_code            string `json:"return_code"`
 	Return_msg             string `json:"return_msg"`
@@ -386,14 +388,16 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request) {
 	sql := `
     SELECT 
         id,node_name,
-        createtime::text,host,
-        ssh_port,ssh_user,
+        createtime::text,
+        host,ssh_port,
+		ssh_authmethod,ssh_user,
         ssh_password,pg_bin,
         pg_data,pg_log,
 		pg_port,pg_database,
 		pg_user,pg_password,
         master_vip,master_vip_networkcard,
         slave_vip,slave_vip_networkcard,    
+		bind_vip_authmethod,
         bind_vip_user,bind_vip_password,     
         remark 
     FROM 
@@ -418,14 +422,16 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request) {
 		var row Row
 		err = rows.Scan(
 			&row.Id, &row.Node_name,
-			&row.Createtime, &row.Host,
-			&row.Ssh_port, &row.Ssh_user,
+			&row.Createtime,
+			&row.Host, &row.Ssh_port,
+			&row.Ssh_authmethod, &row.Ssh_user,
 			&row.Ssh_password, &row.Pg_bin,
 			&row.Pg_data, &row.Pg_log,
 			&row.Pg_port, &row.Pg_database,
 			&row.Pg_user, &row.Pg_password,
 			&row.Master_vip, &row.Master_vip_networkcard,
 			&row.Slave_vip, &row.Slave_vip_networkcard,
+			&row.Bind_vip_authmethod,
 			&row.Bind_vip_user, &row.Bind_vip_password,
 			&row.Remark)
 		if err != nil {
@@ -495,7 +501,7 @@ func getnode_type_and_status(end chan Row, row Row) {
 			err = rows.Scan(&service_type, &pg_version)
 			if err != nil {
 				row.Service_type = "获取节点类型出错"
-				row.Pg_version = "获取版本号出错" + err.Error()
+				row.Pg_version = "获取版本号出错：" + err.Error()
 				end <- row
 				return
 			}
@@ -508,9 +514,9 @@ func getnode_type_and_status(end chan Row, row Row) {
 		row.Service_status = "服务停止"
 		//远程登录，使用 pg_controldata 工具获取
 		cmd := row.Pg_bin + "pg_controldata " + row.Pg_data
-		stdout, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+		stdout, stderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 		if stderr != "" {
-			row.Service_status = "无法获得节点状态，详情" + stderr
+			row.Service_status = "无法获得节点状态，详情：" + stderr
 			end <- row
 			return
 		}
@@ -521,7 +527,7 @@ func getnode_type_and_status(end chan Row, row Row) {
 			//需要检查port是否已经存在,存在表示运行中,备机启动失败后会保留这个状态"in archive recovery"
 			cmd = "netstat -tunlp |grep " + fmt.Sprintf("%d", row.Pg_port)
 			status_out_chan := make(chan Stdout_and_stderr)
-			go ssh_run_chan(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd, status_out_chan)
+			go ssh_run_chan(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd, status_out_chan)
 			status_out := <-status_out_chan
 			if status_out.Stdout != "" {
 				row.Service_status = "运行中"
@@ -533,22 +539,23 @@ func getnode_type_and_status(end chan Row, row Row) {
 			row.Service_status = "服务停止"
 			row.Service_type = "主节点"
 		} else if strings.Contains(stdout, "in production") {
-			//需要检查port是否已经存在,存在表示运行中,pg_basebackup复制后,如果没启动过,则这个值是"in production"
+			//需要检查port是否已经存在,存在表示运行中。有一种情况是使用pg_basebackup复制后,如果没启动过,则这个值是"in production"
 			cmd = "netstat -tunlp |grep " + fmt.Sprintf("%d", row.Pg_port)
 			status_out_chan := make(chan Stdout_and_stderr)
-			go ssh_run_chan(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd, status_out_chan)
+			go ssh_run_chan(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd, status_out_chan)
+
 			//需要检查recovery.conf是否已经存在,存在表示是备节点
 			cmd = "ls " + row.Pg_data + "recovery.conf"
 			type_out_chan := make(chan Stdout_and_stderr)
-			go ssh_run_chan(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd, type_out_chan)
+			go ssh_run_chan(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd, type_out_chan)
+
 			status_out := <-status_out_chan
-			fmt.Println("status_out:")
-			fmt.Println(status_out)
 			if status_out.Stdout != "" {
 				row.Service_status = "运行中"
 			} else {
 				row.Service_status = "服务停止"
 			}
+
 			type_out := <-type_out_chan
 			if type_out.Stdout != "" {
 				row.Service_status = "备节点"
@@ -602,6 +609,20 @@ func insertnodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.FormValue("slave_vip") != "" && !str_is_ip(r.FormValue("slave_vip")) {
 		error_msg = "做为备节点绑定VIP[" + r.FormValue("master_vip") + "]不是合法的ip地址"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	if r.FormValue("ssh_authmethod") != "key" && r.FormValue("ssh_authmethod") != "password" {
+		error_msg = "非法的ssh_authmethod值 [ " + r.FormValue("ssh_authmethod") + " ] "
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	if r.FormValue("bind_vip_authmethod") != "key" && r.FormValue("bind_vip_authmethod") != "password" {
+		error_msg = "非法的bind_vip_authmethod值 [ " + r.FormValue("bind_vip_authmethod") + " ] "
 		OutputJson(w, "FAIL", error_msg, 0)
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 		return
@@ -669,41 +690,47 @@ func insertnodeHandler(w http.ResponseWriter, r *http.Request) {
 	sql = `
     INSERT INTO nodes
     (
-        node_name, host,
-        ssh_port, ssh_user,
-        ssh_password, pg_bin,
-        pg_data, pg_log,
-		pg_port,
+        node_name, 
+		host,ssh_port,
+		ssh_authmethod,
+		ssh_user,ssh_password, 
+        pg_bin,pg_data,
+        pg_log,pg_port,
         pg_database, pg_user,
         pg_password, remark,
         master_vip, master_vip_networkcard,
         slave_vip, slave_vip_networkcard,    
+		bind_vip_authmethod,
         bind_vip_user, bind_vip_password
     ) 
     VALUES
     (   
-        $1, $2,
-        $3, $4,
-        $5, $6,
-        $7, $8,
-        $9,
-		$10, $11,
-		$12, $13,
-		$14, $15,
-		$16, $17,
-		$18, $19
+        $1, 
+		$2,  $3,
+		$4,
+		$5,  $6,
+        $7,  $8,
+        $9,  $10,
+		$11, $12,
+		$13, $14,
+		$15, $16,
+		$17, $18,
+		$19,
+		$20, $21
     ) returning id    
     `
 	rows, err = conn.Query(sql,
-		r.FormValue("node_name"), r.FormValue("host"),
-		r.FormValue("ssh_port"), r.FormValue("ssh_user"),
-		r.FormValue("ssh_password"), r.FormValue("pg_bin"),
-		r.FormValue("pg_data"), r.FormValue("pg_log"),
-		r.FormValue("pg_port"),
+		r.FormValue("node_name"),
+		r.FormValue("host"), r.FormValue("ssh_port"),
+		r.FormValue("ssh_authmethod"),
+		r.FormValue("ssh_user"), r.FormValue("ssh_password"),
+		r.FormValue("pg_bin"), r.FormValue("pg_data"),
+		r.FormValue("pg_log"), r.FormValue("pg_port"),
 		r.FormValue("pg_database"), r.FormValue("pg_user"),
 		r.FormValue("pg_password"), r.FormValue("remark"),
 		r.FormValue("master_vip"), r.FormValue("master_vip_networkcard"),
 		r.FormValue("slave_vip"), r.FormValue("slave_vip_networkcard"),
+		r.FormValue("bind_vip_authmethod"),
 		r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"))
 
 	if err != nil {
@@ -774,6 +801,20 @@ func updatenodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.FormValue("ssh_authmethod") != "key" && r.FormValue("ssh_authmethod") != "password" {
+		error_msg = "非法的ssh_authmethod值 [ " + r.FormValue("ssh_authmethod") + " ] "
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	if r.FormValue("bind_vip_authmethod") != "key" && r.FormValue("bind_vip_authmethod") != "password" {
+		error_msg = "非法的bind_vip_authmethod值 [ " + r.FormValue("bind_vip_authmethod") + " ] "
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
 	//连接db
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
@@ -836,20 +877,23 @@ func updatenodeHandler(w http.ResponseWriter, r *http.Request) {
     SET 
         node_name=$1,
         host=$2, ssh_port=$3,
-        ssh_user=$4, ssh_password=$5,
-        pg_bin=$6, pg_data=$7,
-        pg_port=$8, pg_database=$9,
-        pg_user=$10, pg_password=$11,
-        remark=$12, pg_log=$13,
-        master_vip=$14, master_vip_networkcard=$15,
-        slave_vip=$16, slave_vip_networkcard=$17,    
-        bind_vip_user=$18, bind_vip_password=$19 
+		ssh_authmethod=$4,
+        ssh_user=$5, ssh_password=$6,
+        pg_bin=$7, pg_data=$8,
+        pg_port=$9, pg_database=$10,
+        pg_user=$11, pg_password=$12,
+        remark=$13, pg_log=$14,
+        master_vip=$15, master_vip_networkcard=$16,
+        slave_vip=$17, slave_vip_networkcard=$18, 
+		bind_vip_authmethod =$19,    
+        bind_vip_user=$20, bind_vip_password=$21 
     WHERE 
-        id=$20
+        id=$22
     `
 	_, err = conn.Exec(sql,
 		r.FormValue("node_name"),
 		r.FormValue("host"), r.FormValue("ssh_port"),
+		r.FormValue("ssh_authmethod"),
 		r.FormValue("ssh_user"), r.FormValue("ssh_password"),
 		r.FormValue("pg_bin"), r.FormValue("pg_data"),
 		r.FormValue("pg_port"), r.FormValue("pg_database"),
@@ -857,6 +901,7 @@ func updatenodeHandler(w http.ResponseWriter, r *http.Request) {
 		r.FormValue("remark"), r.FormValue("pg_log"),
 		r.FormValue("master_vip"), r.FormValue("master_vip_networkcard"),
 		r.FormValue("slave_vip"), r.FormValue("slave_vip_networkcard"),
+		r.FormValue("bind_vip_authmethod"),
 		r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"),
 		r.FormValue("id"))
 
@@ -1111,18 +1156,24 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 	var after_lines []string
 	var lines []string
 
+	//提取reload前日志文件中系统级别错误信息
 	if act == "reload" {
-		//reload获取postgresql主进程产生的日志
-		cmd = "ls " + row.Pg_log + " '-rt'"
-		stdout, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
-		if stderr != "" {
-			row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：\n" + stderr
-			return row
+		//这里生成的filename要给后面使用哦，记得中间其它程序不能修改filename的值哦
+		if row.Pg_log != "" {
+			//reload获取postgresql主进程产生的日志
+			cmd = "ls " + row.Pg_log + " '-rt'"
+			stdout, stderr = ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+			if stderr != "" {
+				row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：\n" + stderr
+				return row
+			}
+			lines = strings.Split(stdout, "\n")
+			filename = row.Pg_log + lines[len(lines)-2]
+		} else {
+			filename = row.Pg_data + username + "_logfile.txt"
 		}
-		lines = strings.Split(stdout, "\n")
-		filename = lines[len(lines)-2]
-		cmd = "test -f " + row.Pg_data + "postmaster.pid && pid=`head -1  " + row.Pg_data + "postmaster.pid" + " `;test -f " + row.Pg_data + "postmaster.pid  && cat " + row.Pg_log + filename + " | grep $pid"
-		stdout, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+		cmd = "test -f " + row.Pg_data + "postmaster.pid && pid=`head -1  " + row.Pg_data + "postmaster.pid" + " `;test -f " + row.Pg_data + "postmaster.pid && test -f " + filename + " && cat " + filename + " | grep $pid"
+		stdout, stderr = ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 		if stderr != "" {
 			row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：" + stderr
 			return row
@@ -1132,7 +1183,7 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 
 	//ssh主机并执行相应的命令
 	cmd = row.Pg_bin + "pg_ctl " + act + " -D " + row.Pg_data + mode + " > " + row.Pg_data + username + "_logfile.txt;cat " + row.Pg_data + username + "_logfile.txt"
-	stdout, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+	stdout, stderr = ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 
 	if act == "start" || act == "restart" {
 		time.Sleep(1 * time.Second)
@@ -1143,6 +1194,7 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 	go getnode_type_and_status(row_chan, row)
 	row = <-row_chan
 
+	//当服务为Stop状态时，执行restart会有提示xxx.pid不存在的错误，但接着服务会启动，此时我们应该告诉重启成功更为准确
 	if stderr != "" && (stdout == "" || act != "restart") {
 		row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：" + stderr
 		return row
@@ -1152,7 +1204,7 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 	if row.Service_status == "服务停止" && (act == "start" || act == "restart") {
 		//需要判断是否有参数配置出错或者资源冲突导致数据库关闭
 		cmd = "cat " + row.Pg_data + username + "_logfile.txt"
-		logstdout, logstderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+		logstdout, logstderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 		if logstderr != "" {
 			row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：\n" + logstdout
 			return row
@@ -1164,7 +1216,7 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 		//如果配置了日志重定向,则需要从日志文件检查pg_hba.conf是否配置有误
 		if row.Pg_log != "" {
 			cmd = "ls " + row.Pg_log + " '-rt'"
-			stdout, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+			stdout, stderr = ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 			if stderr != "" {
 				row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：\n" + stderr
 				return row
@@ -1173,7 +1225,7 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 			filename = lines[len(lines)-2]
 
 			cmd = "cat " + row.Pg_log + filename
-			stdout, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+			stdout, stderr = ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 			if stderr != "" {
 				row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：\n" + stderr
 				return row
@@ -1186,7 +1238,7 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 	if row.Service_type == "备节点" && (act == "start" || act == "restart") {
 		if row.Pg_log != "" {
 			cmd = "ls " + row.Pg_log + " '-rt'"
-			logstdout, logstderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+			logstdout, logstderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 			if logstderr != "" {
 				row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：\n" + logstderr
 				return row
@@ -1197,7 +1249,7 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 			filename = row.Pg_data + username + "_logfile.txt"
 		}
 		cmd = "cat " + filename + "|grep 'could not connect to the primary server'"
-		logstdout, logstderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+		logstdout, logstderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 		if logstderr != "" {
 			row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：\n" + logstderr
 			return row
@@ -1208,11 +1260,11 @@ func serviceadmin(row Row, act string, a_mode string, username string) Row {
 		}
 	}
 
-	//如果是reload则需要去检查日志文件
+	//提取reload前日志文件中系统级别错误信息
 	if act == "reload" {
 		//reload获取postgresql主进程产生的日志
-		cmd = "test -f " + row.Pg_data + "postmaster.pid && pid=`head -1  " + row.Pg_data + "postmaster.pid" + " `;test -f " + row.Pg_data + "postmaster.pid  && cat " + row.Pg_log + filename + " | grep $pid"
-		logstdout, logstderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+		cmd = "test -f " + row.Pg_data + "postmaster.pid && pid=`head -1  " + row.Pg_data + "postmaster.pid" + " `;test -f " + row.Pg_data + "postmaster.pid && test -f " + filename + " && cat " + filename + " | grep $pid"
+		logstdout, logstderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 		if stderr != "" {
 			row.Return_msg = "执行 [ " + act + " ] 失败，node_id为 [ " + fmt.Sprintf("%d", row.Id) + " ] ,详情：" + logstderr
 			return row
@@ -1282,7 +1334,7 @@ func parameter_get_file_contentsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	cmd := "cat " + row.Pg_data + r.FormValue("parameter_file_name")
-	stdout, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+	stdout, stderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 	if stderr != "" {
 		error_msg = "获取配置文件内容出错,详情：" + stderr
 		OutputJson(w, "FAIL", error_msg, 0)
@@ -1621,7 +1673,7 @@ func parameter_saveHandler(w http.ResponseWriter, r *http.Request) {
 	cmd = cmd + ";echo \"" + r.FormValue("parameter_file_contents") + "\" > " + parameter_file_name
 	cmd = cmd + ";cat " + parameter_file_name + ".pgclusteradmin.bak"
 
-	stdout, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+	stdout, stderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 	if stderr != "" {
 		error_msg = "保存配置文件内容出错,详情：" + stderr
 		OutputJson(w, "FAIL", error_msg, 0)
@@ -1771,8 +1823,17 @@ func vipadminHandler(w http.ResponseWriter, r *http.Request) {
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 		return
 	}
+
+	//判断bind_vip_authmethod字符值是否合法
+	if r.FormValue("bind_vip_authmethod") != "key" && r.FormValue("bind_vip_authmethod") != "password" {
+		error_msg = "绑定网卡登录认证方式值[" + r.FormValue("bind_vip_authmethod") + "]非法"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
 	//判断绑定操作用户密码是否为空
-	if r.FormValue("bind_vip_password") == "" {
+	if r.FormValue("bind_vip_authmethod") == "password" && r.FormValue("bind_vip_password") == "" {
 		error_msg = "绑定操作用户密码不能为空"
 		OutputJson(w, "FAIL", error_msg, 0)
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
@@ -1790,14 +1851,16 @@ func vipadminHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//如果绑定vip,则需要做一些检查工作
+	//绑定或解绑vip,则需要做一些检查工作
 	cmd := ""
 	if r.FormValue("act") == "bind" {
+		//绑定前需要检查ip是否占用
 		cmd = "ping " + r.FormValue("vip") + " -c 3 | grep 'ttl'"
 	} else {
+		//解绑的需要检查ip是否已经绑定在要解绑的设备上面
 		cmd = "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("vip") + "'|grep '" + r.FormValue("vip_networkcard") + "'"
 	}
-	stdout, stderr := ssh_run(r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
+	stdout, stderr := ssh_run(r.FormValue("bind_vip_authmethod"), "root", r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
 	if stderr != "" {
 		if r.FormValue("act") == "bind" {
 			error_msg = "检查要绑定的VIP[" + r.FormValue("vip") + "]是否已经被占用时出错，详情：" + stderr
@@ -1827,7 +1890,7 @@ func vipadminHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cmd = "cmdpath=`which 'ip'`;$cmdpath addr del '" + r.FormValue("vip") + "/24' dev '" + r.FormValue("vip_networkcard") + "'"
 	}
-	stdout, stderr = ssh_run(r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
+	stdout, stderr = ssh_run(r.FormValue("bind_vip_authmethod"), "root", r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
 	if stderr != "" {
 		if r.FormValue("act") == "bind" {
 			error_msg = "绑定vip出错，详情：" + stderr
@@ -1941,6 +2004,15 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 		return
 	}
+
+	//判断bind_vip_authmethod字符值是否合法
+	if r.FormValue("bind_vip_authmethod") != "key" && r.FormValue("bind_vip_authmethod") != "password" {
+		error_msg = "绑定网卡登录认证方式值[" + r.FormValue("bind_vip_authmethod") + "]非法"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
 	//判断绑定操作用户名是否为空
 	if r.FormValue("vip") != "" && r.FormValue("bind_vip_user") == "" {
 		error_msg = "绑定操作用户名不能为空"
@@ -1948,8 +2020,9 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 		return
 	}
+
 	//判断绑定操作用户密码是否为空
-	if r.FormValue("vip") != "" && r.FormValue("bind_vip_password") == "" {
+	if r.FormValue("vip") != "" && r.FormValue("bind_vip_authmethod") == "password" && r.FormValue("bind_vip_password") == "" {
 		error_msg = "绑定操作用户密码不能为空"
 		OutputJson(w, "FAIL", error_msg, 0)
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
@@ -1973,7 +2046,7 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("vip") != "" {
 		//判断绑定vip和设备号是否已经在本机上存在
 		cmd = "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("vip") + "'|grep '" + r.FormValue("vip_networkcard") + "'"
-		stdout, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+		stdout, stderr := ssh_run(r.FormValue("bind_vip_authmethod"), "root", r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
 		if stderr != "" {
 			error_msg = "检查要绑定的VIP[" + r.FormValue("vip") + "]是否已经在本机上绑定出错，详情：" + stderr
 			OutputJson(w, "FAIL", error_msg, 0)
@@ -1983,7 +2056,7 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 		//没有在本机上绑定需要判断是否已经在其它机器上已经绑定
 		if stdout == "" {
 			cmd = "ping " + r.FormValue("vip") + " -c 3 | grep 'ttl'"
-			stdout, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+			stdout, stderr = ssh_run(r.FormValue("bind_vip_authmethod"), "root", r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
 			if stderr != "" {
 				error_msg = "检查要绑定的VIP[" + r.FormValue("vip") + "]是否已经被占用时出错，详情：" + stderr
 				OutputJson(w, "FAIL", error_msg, 0)
@@ -2019,7 +2092,7 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 		cmd = "rm " + row.Pg_data + "recovery.done -rf;mv " + row.Pg_data + "recovery.conf " + row.Pg_data + "recovery.done"
 		cmd = row.Pg_bin + "pg_ctl start -D " + row.Pg_data + " > " + row.Pg_data + username + "_slave_wakeup.log"
 	}
-	_, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+	_, stderr = ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 	if stderr != "" {
 		error_msg = "备机唤醒出错,详情:" + stderr
 		OutputJson(w, "FAIL", error_msg, 0)
@@ -2030,7 +2103,7 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 	//执行绑定VIP操作
 	if r.FormValue("vip") != "" && bindvip == 1 {
 		cmd = "cmdpath=`which 'ifconfig'`;$cmdpath '" + r.FormValue("vip_networkcard") + "' '" + r.FormValue("vip") + "'"
-		_, stderr = ssh_run(r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
+		_, stderr = ssh_run(r.FormValue("bind_vip_authmethod"), "root", r.FormValue("bind_vip_user"), r.FormValue("bind_vip_password"), row.Host, row.Ssh_port, cmd)
 		if stderr != "" {
 			error_msg = "备机唤醒成功,但绑定vip出错，详情：" + stderr
 			OutputJson(w, "SUCCESS", error_msg, 0)
@@ -2078,7 +2151,7 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 		if sync != "" && sync_state == "" {
 			parameter_file_name := row.Pg_data + "postgresql.conf"
 			cmd = "cat " + parameter_file_name
-			stdout, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+			stdout, stderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 			if stderr != "" {
 				error_msg = "获取配置文件内容出错,详情：" + stderr
 				OutputJson(w, "FAIL", error_msg, 0)
@@ -2089,7 +2162,7 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 			cmd = "cp " + parameter_file_name + " " + parameter_file_name + ".slave_wakeup.bak" + ";echo \"" + stdout + "\" > " + parameter_file_name
 			logfile := row.Pg_data + "slave_wakeup_" + username + "_restart.txt"
 			cmd = cmd + ";" + row.Pg_bin + "pg_ctl restart -D " + row.Pg_data + " -m fast >" + logfile
-			_, stderr = ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+			_, stderr = ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 			if stderr != "" {
 				error_msg = "修改节点流复制模式后重启出错,详情：" + stderr
 				OutputJson(w, "FAIL", error_msg, 0)
@@ -2164,6 +2237,66 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.FormValue("master_unbind_vip") != "" && r.FormValue("master_unbind_vip_networkcard") == "" {
+		error_msg = "主备切换前，主节点要解绑的网卡设备号不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	if r.FormValue("master_bind_vip") != "" && r.FormValue("master_bind_vip_networkcard") == "" {
+		error_msg = "主备切换后，备节点要绑定的网卡设备号不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	if r.FormValue("slave_unbind_vip") != "" && r.FormValue("slave_unbind_vip_networkcard") == "" {
+		error_msg = "主备切换前，备节点要解绑的网卡设备号不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	if r.FormValue("slave_bind_vip") != "" && r.FormValue("slave_bind_vip_networkcard") == "" {
+		error_msg = "主备切换后，主节点要绑定的网卡设备号不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//如果主节点需要绑定或解绑vip，则操作用户不能这空，如果认证方式选择是密码认证，则密码也不能为空
+	if r.FormValue("master_unbind_vip") != "" || r.FormValue("master_bind_vip") != "" {
+		if r.FormValue("master_bind_user") == "" {
+			error_msg = "操作主节点的“绑定或解绑操作用户”不能为空"
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		if r.FormValue("master_bind_password") == "" && r.FormValue("master_bind_vip_authmethod") == "password" {
+			error_msg = "操作主节点的“绑定或解绑操作用户密码”不能为空"
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+	}
+
+	//如果备节点需要绑定或解绑vip，则操作用户不能这空，如果认证方式选择是密码认证，则密码也不能为空
+	if r.FormValue("slave_unbind_vip") != "" || r.FormValue("slave_bind_vip") != "" {
+		if r.FormValue("slave_bind_user") == "" {
+			error_msg = "操作备节点的“绑定或解绑操作用户”不能为空"
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		if r.FormValue("slave_bind_password") == "" && r.FormValue("slave_bind_vip_authmethod") == "password" {
+			error_msg = "操作备节点的“绑定或解绑操作用户密码”不能为空"
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+	}
+
 	//获取master节点资料
 	row_chan := make(chan Row)
 	go get_node_row(master_id, row_chan)
@@ -2194,7 +2327,7 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("master_unbind_vip") != "" {
 		//判断解绑vip是否存在
 		cmd := "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("master_unbind_vip") + "'|grep '" + r.FormValue("master_unbind_vip_networkcard") + "'"
-		go ssh_run_chan(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_unbind_vip_chan)
+		go ssh_run_chan(r.FormValue("master_bind_vip_authmethod"), "root", r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_unbind_vip_chan)
 	}
 
 	//如果备节点需要解绑vip，则需要做一些检查工作
@@ -2202,21 +2335,21 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("slave_unbind_vip") != "" {
 		//判断解绑vip是否存在
 		cmd := "cmdpath=`which 'ip'`;$cmdpath a |grep '" + r.FormValue("slave_unbind_vip") + "'|grep '" + r.FormValue("slave_unbind_vip_networkcard") + "'"
-		go ssh_run_chan(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_unbind_vip_chan)
+		go ssh_run_chan(r.FormValue("slave_bind_vip_authmethod"), "root", r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_unbind_vip_chan)
 	}
 
 	//如果主节点需要绑定vip,并且要绑定的vip不是备节点要解绑的Vip，则需要做一些检查工作
 	master_bind_vip_chan := make(chan Stdout_and_stderr)
 	if r.FormValue("master_bind_vip") != "" && r.FormValue("master_bind_vip") != r.FormValue("slave_unbind_vip") {
 		cmd := "ping " + r.FormValue("master_bind_vip") + " -c 3 | grep 'ttl'"
-		go ssh_run_chan(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_bind_vip_chan)
+		go ssh_run_chan(r.FormValue("master_bind_vip_authmethod"), "root", r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_bind_vip_chan)
 	}
 
 	//如果备节点需要绑定vip,并且要绑定的vip不是主节点要解绑的Vip，则需要做一些检查工作
 	slave_bind_vip_chan := make(chan Stdout_and_stderr)
 	if r.FormValue("slave_bind_vip") != "" && r.FormValue("slave_bind_vip") != r.FormValue("master_unbind_vip") {
 		cmd := "ping " + r.FormValue("slave_bind_vip") + " -c 3 | grep 'ttl'"
-		go ssh_run_chan(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_bind_vip_chan)
+		go ssh_run_chan(r.FormValue("slave_bind_vip_authmethod"), "root", r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_bind_vip_chan)
 	}
 
 	//如果主节点需要解绑vip，前面则需要做一些检查工作,现在获取异步执行结果
@@ -2303,14 +2436,14 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("master_unbind_vip") != "" {
 		//异步执行解绑vip工作
 		cmd := "cmdpath=`which 'ip'`;$cmdpath addr del '" + r.FormValue("master_unbind_vip") + "/24' dev '" + r.FormValue("master_unbind_vip_networkcard") + "'"
-		go ssh_run_chan(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_unbind_vip_chan)
+		go ssh_run_chan(r.FormValue("master_bind_vip_authmethod"), "root", r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_unbind_vip_chan)
 	}
 
 	//切换前备节点解绑vip
 	if r.FormValue("slave_unbind_vip") != "" {
 		//异步执行解绑vip工作
 		cmd := "cmdpath=`which 'ip'`;$cmdpath addr del '" + r.FormValue("slave_unbind_vip") + "/24' dev '" + r.FormValue("slave_unbind_vip_networkcard") + "'"
-		go ssh_run_chan(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_unbind_vip_chan)
+		go ssh_run_chan(r.FormValue("slave_bind_vip_authmethod"), "root", r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_unbind_vip_chan)
 	}
 
 	//如果切换前主节点解绑vip,前面则需要做异步做处理工作,现在获取异步执行结果
@@ -2339,7 +2472,7 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 	//关闭主节点服务
 	cmd := master_row.Pg_bin + "pg_ctl stop -D " + master_row.Pg_data + " -m fast" + " > " + master_row.Pg_data + username + "_promote_stop_logfile.txt;"
 	cmd = cmd + "cat " + master_row.Pg_data + username + "_promote_stop_logfile.txt"
-	_, stderr := ssh_run(master_row.Ssh_user, master_row.Ssh_password, master_row.Host, master_row.Ssh_port, cmd)
+	_, stderr := ssh_run(master_row.Ssh_authmethod, "postgres", master_row.Ssh_user, master_row.Ssh_password, master_row.Host, master_row.Ssh_port, cmd)
 
 	if stderr != "" {
 		error_msg = "关闭主节点服务出错，详情：" + stderr
@@ -2352,7 +2485,7 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 	cmd = "rm " + slave_row.Pg_data + "recovery.done -f;"
 	cmd = cmd + slave_row.Pg_bin + "pg_ctl promote -D " + slave_row.Pg_data + " > " + slave_row.Pg_data + username + "_promote_logfile.txt ;"
 	cmd = cmd + "cat " + slave_row.Pg_data + username + "_promote_logfile.txt"
-	_, stderr = ssh_run(slave_row.Ssh_user, slave_row.Ssh_password, slave_row.Host, slave_row.Ssh_port, cmd)
+	_, stderr = ssh_run(slave_row.Ssh_authmethod, "postgres", slave_row.Ssh_user, slave_row.Ssh_password, slave_row.Host, slave_row.Ssh_port, cmd)
 
 	if stderr != "" {
 		error_msg = "promote备节点出错，详情：" + stderr
@@ -2366,7 +2499,7 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 	cmd = cmd + "echo \"" + r.FormValue("recovery_conf") + "\">" + master_row.Pg_data + "/recovery.conf;"
 	cmd = cmd + master_row.Pg_bin + "pg_ctl start -D " + master_row.Pg_data + " > " + master_row.Pg_data + username + "_promote_start_logfile.txt ;"
 	cmd = cmd + "cat " + master_row.Pg_data + username + "_promote_start_logfile.txt"
-	_, stderr = ssh_run(master_row.Ssh_user, master_row.Ssh_password, master_row.Host, master_row.Ssh_port, cmd)
+	_, stderr = ssh_run(master_row.Ssh_authmethod, "postgres", master_row.Ssh_user, master_row.Ssh_password, master_row.Host, master_row.Ssh_port, cmd)
 
 	if stderr != "" {
 		error_msg = "把主节点变为备节点时出错，详情：" + stderr
@@ -2397,14 +2530,14 @@ func promoteHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("master_bind_vip") != "" {
 		//异步绑定vip
 		cmd := "cmdpath=`which 'ifconfig'`;$cmdpath '" + r.FormValue("master_bind_vip_networkcard") + "' '" + r.FormValue("master_bind_vip") + "'"
-		go ssh_run_chan(r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_bind_vip_chan)
+		go ssh_run_chan(r.FormValue("master_bind_vip_authmethod"), "root", r.FormValue("master_bind_user"), r.FormValue("master_bind_password"), master_row.Host, master_row.Ssh_port, cmd, master_bind_vip_chan)
 	}
 
 	//切换后原来的备节点（现在变成主节点了）需要绑定vip
 	if r.FormValue("slave_bind_vip") != "" {
 		//异步绑定vip
 		cmd := "cmdpath=`which 'ifconfig'`;$cmdpath '" + r.FormValue("slave_bind_vip_networkcard") + "' '" + r.FormValue("slave_bind_vip") + "'"
-		go ssh_run_chan(r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_bind_vip_chan)
+		go ssh_run_chan(r.FormValue("slave_bind_vip_authmethod"), "root", r.FormValue("slave_bind_user"), r.FormValue("slave_bind_password"), slave_row.Host, slave_row.Ssh_port, cmd, slave_bind_vip_chan)
 	}
 
 	//切换后原来的主节点（现在变成备节点了）需要绑定vip,前面则做了异步绑定处理,现在获取异步执行结果
@@ -2450,12 +2583,12 @@ func master_slave_relation_check(master_row Row, slave_row Row, s chan string) {
 	//异步检查主节点
 	cmd := master_row.Pg_bin + "pg_controldata " + master_row.Pg_data
 	master_out_chan := make(chan Stdout_and_stderr)
-	go ssh_run_chan(master_row.Ssh_user, master_row.Ssh_password, master_row.Host, master_row.Ssh_port, cmd, master_out_chan)
+	go ssh_run_chan(master_row.Ssh_authmethod, "postgres", master_row.Ssh_user, master_row.Ssh_password, master_row.Host, master_row.Ssh_port, cmd, master_out_chan)
 
 	//异步检查备节点
 	cmd = slave_row.Pg_bin + "pg_controldata " + slave_row.Pg_data + ";cat " + slave_row.Pg_data + "recovery.conf"
 	slave_out_chan := make(chan Stdout_and_stderr)
-	go ssh_run_chan(slave_row.Ssh_user, slave_row.Ssh_password, slave_row.Host, slave_row.Ssh_port, cmd, slave_out_chan)
+	go ssh_run_chan(slave_row.Ssh_authmethod, "postgres", slave_row.Ssh_user, slave_row.Ssh_password, slave_row.Host, slave_row.Ssh_port, cmd, slave_out_chan)
 
 	//获取异步检查主节点返回的信息
 	master_ret := <-master_out_chan
@@ -2671,7 +2804,7 @@ func get_node_ip_bind_status(nodeid int, s chan Stdout_and_stderr) {
 	}
 	//获取ip绑定情况
 	cmd := "cmdpath=`which 'ip'`;$cmdpath a"
-	stdout, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+	stdout, stderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 	out.Stdout = stdout
 	out.Stderr = stderr
 	s <- out
@@ -2708,13 +2841,15 @@ func get_node_row(nodeid int, s chan Row) {
     SELECT 
         id,node_name,
         createtime::text,host,
+		ssh_authmethod,
         ssh_port,ssh_user,
         ssh_password,pg_bin,
         pg_data,pg_log,
 		pg_port,pg_database,
 		pg_user,pg_password,
         master_vip,master_vip_networkcard,
-        slave_vip,slave_vip_networkcard,    
+        slave_vip,slave_vip_networkcard,   
+		bind_vip_authmethod, 
         bind_vip_user,bind_vip_password,     
         remark 
     FROM 
@@ -2735,6 +2870,7 @@ func get_node_row(nodeid int, s chan Row) {
 		err = rows.Scan(
 			&row.Id, &row.Node_name,
 			&row.Createtime, &row.Host,
+			&row.Ssh_authmethod,
 			&row.Ssh_port, &row.Ssh_user,
 			&row.Ssh_password, &row.Pg_bin,
 			&row.Pg_data, &row.Pg_log,
@@ -2742,6 +2878,7 @@ func get_node_row(nodeid int, s chan Row) {
 			&row.Pg_user, &row.Pg_password,
 			&row.Master_vip, &row.Master_vip_networkcard,
 			&row.Slave_vip, &row.Slave_vip_networkcard,
+			&row.Bind_vip_authmethod,
 			&row.Bind_vip_user, &row.Bind_vip_password,
 			&row.Remark)
 		if err != nil {
@@ -2781,7 +2918,7 @@ func vacuumdb(nodeid int, remote_ip string, username string) (errmsg string) {
 	//执行全库vacuum
 	cmd := "export PGPASSWORD=" + row.Pg_password
 	cmd = cmd + ";" + row.Pg_bin + "vacuumdb -a -z -w -h " + row.Host + " -p " + fmt.Sprintf("%d", row.Pg_port) + " -U " + row.Pg_user
-	_, stderr := ssh_run(row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
+	_, stderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 	if stderr != "" {
 		error_msg = "执行vacuumdb出错[ " + fmt.Sprintf("%d", nodeid) + " ]详情：" + stderr
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
@@ -2814,6 +2951,7 @@ func OutputJson(w http.ResponseWriter, return_code string, return_msg string, lo
 功能描述：生成返回json数据
 
 参数说明：
+authmethod --ssh认证方法，key（私钥登陆）或者password（密码登录）
 user      --ssh登录用户名
 password  --ssh登录用户密码
 host      --ssh访问主机ip或host
@@ -2824,7 +2962,7 @@ session   --ssh.Session连接指针
 error     --error对象
 */
 
-func ssh_connect(user string, password string, host string, port int) (*ssh.Client, *ssh.Session, error) {
+func ssh_connect(authmethod string, user string, password string, host string, port int) (*ssh.Client, *ssh.Session, error) {
 	var (
 		auth         []ssh.AuthMethod
 		addr         string
@@ -2835,7 +2973,16 @@ func ssh_connect(user string, password string, host string, port int) (*ssh.Clie
 	)
 
 	auth = make([]ssh.AuthMethod, 0)
-	auth = append(auth, ssh.Password(password))
+	if authmethod == "password" {
+		auth = append(auth, ssh.Password(password))
+	} else {
+		pemBytes := []byte(password)
+		signer, err := ssh.ParsePrivateKey(pemBytes)
+		if err != nil {
+			return nil, nil, err
+		}
+		auth = append(auth, ssh.PublicKeys(signer))
+	}
 
 	clientConfig = &ssh.ClientConfig{
 		User:    user,
@@ -2861,6 +3008,8 @@ func ssh_connect(user string, password string, host string, port int) (*ssh.Clie
 功能描述：ssh上主机并执行命令，返回执行的结果及错误
 
 参数说明：
+authmethod --ssh认证方法，key（私钥登陆）或者password（密码登录）
+user_level --用户级别，分别postgres和root
 user      --ssh登录用户名
 password  --ssh登录用户密码
 host      --ssh访问主机ip或host
@@ -2872,9 +3021,22 @@ return_stdout  --返回执行返回的输出信息
 return_stderr  --返回执行返回的出错信息
 */
 
-func ssh_run(user string, password string, host string, port int, cmd string) (return_stdout string, return_stderr string) {
+func ssh_run(authmethod string, user_level string, user string, password string, host string, port int, cmd string) (return_stdout string, return_stderr string) {
 	//ssh连接
-	client, session, err := ssh_connect(user, password, host, port)
+	if authmethod != "key" && authmethod != "password" {
+		return "", "authmethod值[" + authmethod + "]不合法"
+	}
+	if user_level != "postgres" && user_level != "root" {
+		return "", "user_level值[" + user_level + "]不合法"
+	}
+	if authmethod == "key" {
+		if user_level == "postgres" {
+			password = get_postgres_private_key()
+		} else {
+			password = get_root_private_key()
+		}
+	}
+	client, session, err := ssh_connect(authmethod, user, password, host, port)
 	if err != nil {
 		return "", err.Error()
 	}
@@ -2895,6 +3057,8 @@ func ssh_run(user string, password string, host string, port int, cmd string) (r
 功能描述：异步--ssh上主机并执行命令，返回执行的结果及错误
 
 参数说明：
+authmethod --ssh认证方法，key（私钥登陆）或者password（密码登录）
+user_level --用户级别，分别postgres和root
 user      --ssh登录用户名
 password  --ssh登录用户密码
 host      --ssh访问主机ip或host
@@ -2905,11 +3069,31 @@ cmd       --要执行的脚本
 s -- 结构体Stdout_and_stderr变量
 */
 
-func ssh_run_chan(user string, password string, host string, port int, cmd string, s chan Stdout_and_stderr) {
+func ssh_run_chan(authmethod string, user_level string, user string, password string, host string, port int, cmd string, s chan Stdout_and_stderr) {
 	//定义返回的struct
 	var out Stdout_and_stderr
+	if authmethod != "key" && authmethod != "password" {
+		out.Stdout = ""
+		out.Stderr = "authmethod值[" + authmethod + "]不合法"
+		s <- out
+		return
+	}
+	if user_level != "postgres" && user_level != "root" {
+		out.Stdout = ""
+		out.Stderr = "user_level值[" + user_level + "]不合法"
+		s <- out
+		return
+	}
+	if authmethod == "key" {
+		if user_level == "postgres" {
+			password = get_postgres_private_key()
+		} else {
+			password = get_root_private_key()
+		}
+	}
 	//ssh连接
-	client, session, err := ssh_connect(user, password, host, port)
+
+	client, session, err := ssh_connect(authmethod, user, password, host, port)
 	if err != nil {
 		out.Stdout = ""
 		out.Stderr = err.Error()
@@ -3074,4 +3258,36 @@ func extractConfig() pgx.ConnConfig {
 	config.Port = 5432            //端口号
 
 	return config
+}
+
+/*
+功能描述：返回postgres用户的私钥证书
+
+参数说明：无
+
+返回值说明：
+key -- postgres用户的私钥证书,证书类型可以是“DSA”或“RSA”
+*/
+
+func get_postgres_private_key() (key string) {
+	postgres_private_key := `-----BEGIN RSA PRIVATE KEY-----
+数据库服务管理用户私钥，可以使用rsa或者dsa
+-----END RSA PRIVATE KEY-----`
+	return postgres_private_key
+}
+
+/*
+功能描述：返回root用户的私钥证书
+
+参数说明：无
+
+返回值说明：
+key -- root用户的私钥证书,证书类型可以是“DSA”或“RSA”
+*/
+
+func get_root_private_key() (key string) {
+	root_private_key := `-----BEGIN DSA PRIVATE KEY-----
+系统管理员root用户私钥，可以使用rsa或者dsa
+-----END DSA PRIVATE KEY-----`
+	return root_private_key
 }

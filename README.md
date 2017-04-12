@@ -1,12 +1,15 @@
 # pgclusteradmin
 
-Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主要功能是实现对postgresql服务进行管理，主备切换进行管理；系统支持多用户，操作认证；操作人员通过浏览器从远程登录进入管理平台，前面的界面使用easyui实现。
+Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主要功能有“节点资料集中管理”、“参数在线配置，参数文件多版本管理，参数文件模板管理”、“服务管理（即服务start,stop,restart,stop）”、“vip管理”、“备机唤醒”、“主备切换”；系统支持多用户，操作认证，支持SSH密码登陆和SSH公钥、私钥登陆；操作人员通过浏览器从远程登录进入管理平台，前面的界面使用easyui实现。
 
 ### 一、功能列表
 
-* 节点资料增加，编辑，删除
-* 单一节点服务start、stop、restart、reload及显示服务状态
-* 主备节点一键切换
+* 节点资料增加，编辑，删除。
+* 各个节点运行参数配置，参数文件多版本管理，参数文件模板管理。
+* 单一节点服务start、stop、restart、reload及显示服务状态。
+* 节点对应机器VIP绑定与解绑。
+* 备机唤醒管理。
+* 主备节点一键切换。
 
 ### 二、部署环境
 
@@ -57,9 +60,9 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 
     host    all             all             192.168.1.0/24          md5
 
-配置完成后需要重启服务,其它参数视需要自己配置
+配置完成后需要重启服务,其它参数视需要自己配置。
 
-建立pgclusteradmin库并导入建立资料表
+建立pgclusteradmin库并导入建立资料表。
 
     /usr/local/pgsql9.6.1/bin/psql -h 192.168.1.10 -U postgres -d postgres -p 5432 
     postgres=# create database pgcluster ENCODING 'utf8' template template0;
@@ -70,50 +73,54 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 --节点资料表
 
     create table nodes
-    (
-       id serial not null unique,
-       node_name text not null unique,    
-       createtime timestamp not null default now(),
-       host text not null,          
-       ssh_port integer not null,
-       ssh_user text not null,
-       ssh_password text not null,  
-       pg_bin text not null,
-       pg_data text not null,
-       pg_log text not null default '',  
-       pg_port integer not null,
-       pg_database text not null,
-       pg_user text not null,
-       pg_password text not null,
-       master_vip text,
-       master_vip_networkcard text,
-       slave_vip text,
-       slave_vip_networkcard text,
-       bind_vip_user text,
-       bind_vip_password text,   
-       remark text 
-    );
-
-    COMMENT ON TABLE nodes IS '节点资料表';
-    COMMENT ON COLUMN nodes.id IS '系统编号';
-    COMMENT ON COLUMN nodes.node_name IS '节点名称';   
-    COMMENT ON COLUMN nodes.createtime IS '建立时间';   
-    COMMENT ON COLUMN nodes.host IS '主机名或ip';   
-    COMMENT ON COLUMN nodes.ssh_port IS 'ssh服务端口号';   
-    COMMENT ON COLUMN nodes.ssh_user IS 'ssh用户';   
-    COMMENT ON COLUMN nodes.ssh_password IS 'ssh密码';  
-    COMMENT ON COLUMN nodes.pg_bin IS 'pg管理程序所在路径';    
-    COMMENT ON COLUMN nodes.pg_data IS 'pgDATA所在路径';     
-    COMMENT ON COLUMN nodes.pg_log IS '用户访问日志保存路径';    
-    COMMENT ON COLUMN nodes.pg_port IS 'pg服务端口号';   
-    COMMENT ON COLUMN nodes.pg_user IS 'pg用户';   
-    COMMENT ON COLUMN nodes.pg_password IS 'pg密码';   
-    COMMENT ON COLUMN nodes.master_vip IS '主节点时绑定VIP'; 
-    COMMENT ON COLUMN nodes.master_vip_networkcard IS '主节点时绑定网卡设备号';                  
-    COMMENT ON COLUMN nodes.slave_vip IS '备节点时绑定VIP';                  
-    COMMENT ON COLUMN nodes.slave_vip_networkcard IS '备节点时绑定网卡设备号';                  
-    COMMENT ON COLUMN nodes.bind_vip_user IS '绑定网卡操作用户';                  
-    COMMENT ON COLUMN nodes.bind_vip_password IS '绑定网卡操作密码';         
+	(
+	   id serial not null unique,
+	   node_name text not null unique,    
+	   createtime timestamp not null default now(),
+	   host text not null,          
+	   ssh_port integer not null,
+	   ssh_user text not null,
+	   ssh_password text not null,  
+	   ssh_authmethod text not null default 'key',
+	   pg_bin text not null,
+	   pg_data text not null,
+	   pg_log text not null default '',
+	   pg_port integer not null,
+	   pg_database text not null,
+	   pg_user text not null,
+	   pg_password text not null,
+	   master_vip text,
+	   master_vip_networkcard text,
+	   slave_vip text,
+	   slave_vip_networkcard text,
+	   bind_vip_user text,
+	   bind_vip_password text,  
+	   bind_vip_authmethod text default 'key', 
+	   remark text 
+	);
+	
+	COMMENT ON TABLE nodes IS '节点资料表';
+	COMMENT ON COLUMN nodes.id IS '系统编号';
+	COMMENT ON COLUMN nodes.node_name IS '节点名称';   
+	COMMENT ON COLUMN nodes.createtime IS '建立时间';   
+	COMMENT ON COLUMN nodes.host IS '主机名或ip';   
+	COMMENT ON COLUMN nodes.ssh_port IS 'ssh服务端口号';   
+	COMMENT ON COLUMN nodes.ssh_user IS 'ssh用户';   
+	COMMENT ON COLUMN nodes.ssh_password IS 'ssh密码';  
+	COMMENT ON COLUMN nodes.ssh_authmethod IS '用户登录ssh服务认证方式，其值只能是key或者password';  
+	COMMENT ON COLUMN nodes.pg_bin IS 'pg管理程序所在路径';    
+	COMMENT ON COLUMN nodes.pg_data IS 'pgDATA所在路径';      
+	COMMENT ON COLUMN nodes.pg_log IS '用户访问日志保存路径';      
+	COMMENT ON COLUMN nodes.pg_port IS 'pg服务端口号';   
+	COMMENT ON COLUMN nodes.pg_user IS 'pg用户';   
+	COMMENT ON COLUMN nodes.pg_password IS 'pg密码';   
+	COMMENT ON COLUMN nodes.master_vip IS '主节点时绑定VIP'; 
+	COMMENT ON COLUMN nodes.master_vip_networkcard IS '主节点时绑定网卡设备号';                  
+	COMMENT ON COLUMN nodes.slave_vip IS '备节点时绑定VIP';                  
+	COMMENT ON COLUMN nodes.slave_vip_networkcard IS '备节点时绑定网卡设备号';                  
+	COMMENT ON COLUMN nodes.bind_vip_user IS '绑定网卡操作用户';                  
+	COMMENT ON COLUMN nodes.bind_vip_password IS '绑定网卡操作密码';    
+	COMMENT ON COLUMN nodes.bind_vip_authmethod IS '绑定网卡操作用户登录ssh服务认证方式，其值只能是key或者password';      
 
 --操作员资料表
 
@@ -236,11 +243,76 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     接收对象中: 100% (374/374), 284.09 KiB | 197.00 KiB/s, done.
     处理 delta 中: 100% (201/201), done.
     [root@ad ad]#
+	
+#### 配置连接数据库参数
+
+	打开pgclusteradmin.go文件，拉下最后面，找到函数extractConfig()，代码如下所示
+
+	/*
+	功能描述：配置postgresql连接参数 
+	            
+	参数说明：无  
+	
+	返回值说明： 
+	pgx.ConnConfig -- pg连接参数结构体
+	*/
+	
+	func extractConfig() pgx.ConnConfig {
+	
+	    var config pgx.ConnConfig
+	
+	    config.Host = "192.168.1.10" //数据库主机host或ip
+	    config.User = "postgres"     //连接用户
+	    config.Password = "pgsql"    //用户密码
+	    config.Database = "pgcluster" //连接数据库名
+	    config.Port = 5432            //端口号
+	    
+	    return config       
+	}  
+
+	修改成上面部署postgresql的相应参数即可。
+	
+#### 配置数据库服务管理用户（os用户，一般使用postgres用户名）和os管理员（一般使用root用户名）远程ssh登录使用的私钥－－不使用私钥认证登录的话这一步可以忽略
+
+		
+	怎样配置使用SSH公钥、私钥登陆
+	1、root用户登陆后，运行以下第一句指令，其他根据提示进行输入:
+	
+	ssh-keygen -t rsa    也可以使用DSA
+	Generating public/private rsa key pair.
+	Enter file in which to save the key (/root/.ssh/id_rsa):                 建议直接回车使用默认路径
+	Created directory '/root/.ssh'
+	Enter passphrase (empty for no passphrase):            输入密码短语（留空则直接回车）
+	Enter same passphrase again:                                  重复密码短语
+	Your identification has been saved in /root/.ssh/id_rsa.
+	Your public key has been saved in /root/.ssh/id_rsa.pub.
+	The key fingerprint is:
+	05:71:53:92:96:ba:53:20:55:15:7e:5d:59:85:32:e4 root@test
+	The key's randomart image is:
+	+--[ RSA 2048]----+
+	|   o o ..                |
+	| . o oo.+ .            |
+	| o.+... =               |
+	| ...o                     |
+	| o S                     |
+	| .                         |
+	|                           |
+	|                           |
+	|                           |
+	+--------------------+
+	
+	此时在/root/.ssh/目录下生成了2个文件，id_rsa为私钥，id_rsa.pub为公钥。
+	将公钥复制到需要登录电脑的/root/.ssh/authorized_keys文件中。
+	好了，至此只要你保存好你的私钥，你的服务器相比原来使用root用户加密码登陆来说已经安全多了。
+	
+	2、数据库服务管理用户postgres的公钥、私钥生成方法与上面root用户的公钥、私钥生成方法一致，也可以root共用一对公钥、私钥。
+	
+	3、打开pgclusteradmin.go文件，拉下最后面，找到函数get_postgres_private_key()和get_root_private_key()，把数据库服务管理用户和管理员root使用的私钥复制上去
 
 #### 运行pgclusteradmin
 
     [root@ad ad]# cd pgclusteradmin/
-    [root@ad pgclusteradmin]# go run pgclusteradmin.g
+    [root@ad pgclusteradmin]# go run pgclusteradmin.go
 
 #### 访问pgclusteradmin
 
@@ -271,6 +343,14 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
     
 ### 六、更新日志
 
+#### 2017-4-12
+
+* 1、所有涉及到ssh登录的接口或函数增加公钥、私钥登陆方法
+
+#### 2017-4-4
+
+* 1、增加参数配置多版本管理及参数模板文件管理
+
 #### 2017-3-28
 
 * 1、修复了ssh连接资源无法释放，造成内存泄漏的问题
@@ -282,8 +362,8 @@ Pgclusteradmin是一款基于go开发的postgresql集群管理工具，当前主
 #### 2017-3-22
 
 * 1、新增一个新的功能模块“备机唤醒”,支持一键唤醒并且绑定VIP。唤醒成功后系统会自动检查节点是否为“同步复制模式”和是否有“同步备机”连接上来，如果是“同步复制模式”并且没有“同步备机”连接上来，程序会主动把节点降级为“异步复制”模式。
-* 2、重写了“服务管理”接口，解决了日志重定向后错误日志提取问题
-* 3、优化了部分接口，异步执行代码提高执行效率
+* 2、重写了“服务管理”接口，解决了日志重定向后错误日志提取问题。
+* 3、优化了部分接口，异步执行代码提高执行效率。
 
 #### 2017-3-14
 
