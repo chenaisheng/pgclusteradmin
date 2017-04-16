@@ -558,9 +558,9 @@ func getnode_type_and_status(end chan Row, row Row) {
 
 			type_out := <-type_out_chan
 			if type_out.Stdout != "" {
-				row.Service_status = "备节点"
+				row.Service_type = "备节点"
 			} else {
-				row.Service_status = "主节点"
+				row.Service_type = "主节点"
 			}
 		} else if strings.Contains(stdout, "minimal") || strings.Contains(stdout, "archive") {
 			row.Service_type = "普通节点"
