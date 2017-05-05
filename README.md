@@ -1,6 +1,6 @@
 # pgclusteradmin
 
-Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主要功能有“节点资料集中管理”、“运行参数在线配置，参数文件多版本管理，参数文件模板管理”、“服务管理（即服务start,stop,restart,stop）”、“VIP绑定解绑”、“备机唤醒”、“主备切换”；系统支持多用户，操作认证，支持SSH密码登陆和SSH公钥、私钥登陆；操作人员通过浏览器从远程登录进入管理平台，前面的界面使用EasyUI实现。
+Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主要功能有“节点资料集中管理”、“运行参数在线配置，参数文件多版本管理，参数文件模板管理”、“服务管理（即服务start,stop,restart,stop）”、“VIP绑定解绑”、“备机唤醒”、“主备切换”、“巡检报告”；系统支持多用户，操作认证，支持SSH密码登陆和SSH公钥、私钥登陆；操作人员通过浏览器从远程登录进入管理平台，前面的界面使用EasyUI实现。
 
 ### 一、功能列表
 
@@ -10,6 +10,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 * 节点对应机器VIP绑定与解绑。
 * 备机唤醒管理。
 * 主备节点一键切换。
+* 巡检报告生成及导出。
 
 ### 二、部署环境
 
@@ -68,123 +69,11 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
     postgres=# create database pgcluster ENCODING 'utf8' template template0;
     \c pgcluster
 
-－－导入下面数据表及数据
+－－导入源码包中的pgcluster.sql脚本
 
---节点资料表
-
-    create table nodes
-	(
-	   id serial not null unique,
-	   node_name text not null unique,    
-	   createtime timestamp not null default now(),
-	   host text not null,          
-	   ssh_port integer not null,
-	   ssh_user text not null,
-	   ssh_password text not null,  
-	   ssh_authmethod text not null default 'key',
-	   pg_bin text not null,
-	   pg_data text not null,
-	   pg_log text not null default '',
-	   pg_port integer not null,
-	   pg_database text not null,
-	   pg_user text not null,
-	   pg_password text not null,
-	   master_vip text,
-	   master_vip_networkcard text,
-	   slave_vip text,
-	   slave_vip_networkcard text,
-	   bind_vip_user text,
-	   bind_vip_password text,  
-	   bind_vip_authmethod text default 'key', 
-	   remark text 
-	);
+	\i pgcluster.sql
 	
-	COMMENT ON TABLE nodes IS '节点资料表';
-	COMMENT ON COLUMN nodes.id IS '系统编号';
-	COMMENT ON COLUMN nodes.node_name IS '节点名称';   
-	COMMENT ON COLUMN nodes.createtime IS '建立时间';   
-	COMMENT ON COLUMN nodes.host IS '主机名或ip';   
-	COMMENT ON COLUMN nodes.ssh_port IS 'ssh服务端口号';   
-	COMMENT ON COLUMN nodes.ssh_user IS 'ssh用户';   
-	COMMENT ON COLUMN nodes.ssh_password IS 'ssh密码';  
-	COMMENT ON COLUMN nodes.ssh_authmethod IS '用户登录ssh服务认证方式，其值只能是key或者password';  
-	COMMENT ON COLUMN nodes.pg_bin IS 'pg管理程序所在路径';    
-	COMMENT ON COLUMN nodes.pg_data IS 'pgDATA所在路径';      
-	COMMENT ON COLUMN nodes.pg_log IS '用户访问日志保存路径';      
-	COMMENT ON COLUMN nodes.pg_port IS 'pg服务端口号';   
-	COMMENT ON COLUMN nodes.pg_user IS 'pg用户';   
-	COMMENT ON COLUMN nodes.pg_password IS 'pg密码';   
-	COMMENT ON COLUMN nodes.master_vip IS '主节点时绑定VIP'; 
-	COMMENT ON COLUMN nodes.master_vip_networkcard IS '主节点时绑定网卡设备号';                  
-	COMMENT ON COLUMN nodes.slave_vip IS '备节点时绑定VIP';                  
-	COMMENT ON COLUMN nodes.slave_vip_networkcard IS '备节点时绑定网卡设备号';                  
-	COMMENT ON COLUMN nodes.bind_vip_user IS '绑定网卡操作用户';                  
-	COMMENT ON COLUMN nodes.bind_vip_password IS '绑定网卡操作密码';    
-	COMMENT ON COLUMN nodes.bind_vip_authmethod IS '绑定网卡操作用户登录ssh服务认证方式，其值只能是key或者password';      
 
---操作员资料表
-
-    CREATE TABLE users
-    (
-        id serial not null unique,
-        username text not null unique,
-        password text not null
-    );
-
-    COMMENT ON TABLE users IS '操作员资料表';
-    COMMENT ON COLUMN users.id IS '系统编号';
-    COMMENT ON COLUMN users.username IS '登录账号';
-    COMMENT ON COLUMN users.password IS '登录密码md5值';
-
---增加一个操作员记录表
-
-    INSERT INTO users (username,password) values('admin',md5('admin'));
-
---操作日志表
-
-    CREATE TABLE log
-    (
-        id serial not null unique,
-        createtime timestamp not null default now(),
-        remote_ip text,
-        modlename text,
-        username text,
-        log_level text,
-        remark text 
-    );
-    COMMENT ON TABLE log IS '日志表';
-    COMMENT ON COLUMN log.id IS '系统编号';
-    COMMENT ON COLUMN log.createtime IS '访问时间';
-    COMMENT ON COLUMN log.remote_ip IS '访问客户端ip地址';
-    COMMENT ON COLUMN log.username IS '用户名';  
-    COMMENT ON COLUMN log.modlename IS '模块名称';
-    COMMENT ON COLUMN log.log_level IS '日志级别';
-    COMMENT ON COLUMN log.remark IS '日志内容';
-	
---存储pg参数文件内容多个版本和公用模板
-
-	CREATE TABLE parameter_bak_template
-	(
-	    id serial not null unique,
-	    nodeid integer not null,
-	    createtime timestamp not null default now(),
-	    username text not null,
-	    filename text not null,
-	    version  text not null,
-	    content  text not null,
-	    category text not null,
-	    remark   text not null
-	);
-	COMMENT ON TABLE parameter_bak_template IS '参数文件备份或者模板表';
-	COMMENT ON COLUMN parameter_bak_template.id IS '系统编号';
-	COMMENT ON COLUMN parameter_bak_template.nodeid IS '节点id号';
-	COMMENT ON COLUMN parameter_bak_template.createtime IS '备份日期';
-	COMMENT ON COLUMN parameter_bak_template.username IS '操作员账号';
-	COMMENT ON COLUMN parameter_bak_template.filename IS '文件名称';
-	COMMENT ON COLUMN parameter_bak_template.version IS '版本号';
-	COMMENT ON COLUMN parameter_bak_template.content IS '内容';
-	COMMENT ON COLUMN parameter_bak_template.category IS '类别，值为bak或者template';
-	COMMENT ON COLUMN parameter_bak_template.remark IS '备注';
 
 #### 下载pgclusteradmin所需要的go支持包
 
@@ -229,6 +118,18 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
     remote: Total 3613 (delta 157), reused 0 (delta 0), pack-reused 3370
     接收对象中: 100% (3613/3613), 1.24 MiB | 228.00 KiB/s, done.
     处理 delta 中: 100% (2481/2481), done.
+	
+－－golang excel驱动包
+
+	[root@ad github.com]# cd /usr/lib/golang/src/github.com/
+	[root@ad github.com]# mkdir tealeg
+	[root@ad github.com]# cd tealeg/
+	[root@ad tealeg]# git clone https://github.com/tealeg/xlsx
+	正克隆到 'xlsx'...
+	remote: Counting objects: 2793, done.
+	remote: Total 2793 (delta 0), reused 0 (delta 0), pack-reused 2792
+	接收对象中: 100% (2793/2793), 1.11 MiB | 357.00 KiB/s, done.
+	处理 delta 中: 100% (1503/1503), done.
     
 ### 四、pgclusteradmin部署配置和访问
 
@@ -316,7 +217,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 #### 访问pgclusteradmin
 
-    打开一个浏览器，输入 http://192.168.1.10:10001即可进入管理器，192.168.1.10换成你自己ip地址即可。
+    打开一个浏览器，输入 http://192.168.1.10:10001即可进入管理器，192.168.1.10换成你自己ip地址即可。初始化的用户名和密码都是"admin"
 
 ### 五、界面图 
 
@@ -340,8 +241,30 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 #### 主备切换
 ![](gui_image/主备切换.png)
+
+#### 巡检报告state
+![](gui_image/巡检报告state.png)
+
+#### 巡检报告tablespace
+![](gui_image/巡检报告tablespace.png)
+
+#### 巡检报告role
+![](gui_image/巡检报告role.png)
+
+#### 巡检报告database
+![](gui_image/巡检报告database.png)
+
+#### 巡检报告table
+![](gui_image/巡检报告table.png)
+
+#### 巡检报告index
+![](gui_image/巡检报告index.png)
     
 ### 六、更新日志
+
+#### 2017-5-05
+
+* 1、增加了“巡检报告”主模块
 
 #### 2017-4-16
 

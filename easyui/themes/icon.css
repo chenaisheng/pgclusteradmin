@@ -112,6 +112,12 @@
 .icon-template{
  background:url('icons/template.png') no-repeat center center;
 }
+.icon-report{
+ background:url('icons/report.png') no-repeat center center;
+}
+.icon-export{
+ background:url('icons/export.png') no-repeat center center;
+}
 
 .icon-mini-add{
 	background:url('icons/mini_add.png') no-repeat center center;

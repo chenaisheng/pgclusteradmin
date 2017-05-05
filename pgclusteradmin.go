@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/astaxie/session"
 	_ "github.com/astaxie/session/providers/memory"
 	"github.com/jackc/pgx"
+	"github.com/tealeg/xlsx"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -155,6 +157,29 @@ func main() {
 	//主备切换弹出窗口时获取主备节点的ip绑定情况
 	http.HandleFunc("/promote_get_ip_bind_status/", promote_get_ip_bind_statusHandler)
 
+	//生成巡检报告
+	http.HandleFunc("/inspection_report_make/", inspection_report_makeHandler)
+	//巡检报告列表
+	http.HandleFunc("/inspection_report_list/", inspection_report_listHandler)
+	//巡检报告－－状态
+	http.HandleFunc("/inspection_report_state_list/", inspection_report_state_listHandler)
+	//巡检报告－－表空间
+	http.HandleFunc("/inspection_report_tablespace_list/", inspection_report_tablespace_listHandler)
+	//巡检报告－－角色
+	http.HandleFunc("/inspection_report_role_list/", inspection_report_role_listHandler)
+	//巡检报告－－数据库
+	http.HandleFunc("/inspection_report_database_list/", inspection_report_database_listHandler)
+	//巡检报告－－数据表
+	http.HandleFunc("/inspection_report_table_list/", inspection_report_table_listHandler)
+	//巡检报告－－索引
+	http.HandleFunc("/inspection_report_index_list/", inspection_report_index_listHandler)
+	//修改巡检报告名称
+	http.HandleFunc("/inspection_report_update/", inspection_report_updateHandler)
+	//删除巡检报告
+	http.HandleFunc("/inspection_report_delete/", inspection_report_deleteHandler)
+	//导出巡检报告
+	http.HandleFunc("/inspection_report_export/", inspection_report_exportHandler)
+
 	http.ListenAndServe(":10001", nil)
 
 }
@@ -189,7 +214,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	//开启session
 	sess := globalSessions.SessionStart(w, r)
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -255,7 +280,7 @@ func password_updateHandler(w http.ResponseWriter, r *http.Request) {
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 		return
 	}
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -358,7 +383,8 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request) {
 		//OutputJson(w,"FAIL","系统无法识别你的身份",0)
 		return
 	}
-	//连接db
+
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -368,22 +394,6 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-
-	var order_fields string
-	var order_type string
-
-	order_fields = r.FormValue("sort")
-	order_type = r.FormValue("order")
-
-	if order_fields == "" {
-		order_fields = "id"
-	}
-
-	if order_type == "" {
-		order_type = "asc"
-	}
-
-	order_fields_type := order_fields + " " + order_type
 
 	sql := `
     SELECT 
@@ -402,17 +412,15 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request) {
         remark 
     FROM 
         nodes 
-    ORDER BY $1
-    `
+    ` + sql_sort_limit(r)
 
-	rows, err := conn.Query(sql, order_fields_type)
+	rows, err := conn.Query(sql)
 	if err != nil {
 		error_msg = "执行查询失败，详情：" + err.Error()
 		OutputJson(w, "FAIL", error_msg, 0)
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 		return
 	}
-	defer rows.Close()
 
 	var data Data = Data{}
 	data.Rows = make([]Row, 0)
@@ -446,12 +454,35 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request) {
 		go getnode_type_and_status(end, data.Rows[data.Total])
 		data.Total = data.Total + 1
 	}
+	rows.Close()
+
 	for i := 0; i < data.Total; i++ {
 		t := <-end
 		data.Rows[t.Json_id].Service_type = t.Service_type
 		data.Rows[t.Json_id].Service_status = t.Service_status
 		data.Rows[t.Json_id].Pg_version = t.Pg_version
 	}
+
+	//统计总记录数
+	sql = "SELECT COUNT(1) AS num FROM nodes"
+	rows, err = conn.Query(sql)
+	if err != nil {
+		error_msg = "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	if rows.Next() {
+		err = rows.Scan(&data.Total)
+		if err != nil {
+			error_msg = "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+	}
+	rows.Close()
+
 	ret, _ := json.Marshal(data)
 	w.Write(ret)
 }
@@ -462,9 +493,10 @@ func getnoderowsHandler(w http.ResponseWriter, r *http.Request) {
 先用数据库参数连接获取 节点类型、状态及版本信息 ，如果数据库服务获取失败再用pg_controldata获取
 
 参数说明：
-row -- *Row指针
+row -- Row
 
-返回值说明： 无
+返回值说明：
+end -- chan Row
 */
 
 func getnode_type_and_status(end chan Row, row Row) {
@@ -480,7 +512,7 @@ func getnode_type_and_status(end chan Row, row Row) {
 	config.Database = row.Pg_database
 	config.Port = row.Pg_port
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(config)
 	if err == nil {
@@ -628,7 +660,7 @@ func insertnodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -815,7 +847,7 @@ func updatenodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -945,7 +977,7 @@ func deletenodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -1391,7 +1423,7 @@ func parameter_bak_template_listHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -1494,7 +1526,7 @@ func parameter_get_bak_template_contentsHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err = pgx.Connect(extractConfig())
 	if err != nil {
@@ -1567,7 +1599,7 @@ func parameter_files_bak_template_deleteHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -1727,7 +1759,7 @@ func parameter_save_bak_template(nodeid int, username string, filename string, c
 	var error_msg string
 	modlename := "parameter_save_bak_template"
 
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {
@@ -2119,7 +2151,7 @@ func slave_wakeupHandler(w http.ResponseWriter, r *http.Request) {
 	config.Password = row.Pg_password
 	config.Database = row.Pg_database
 	config.Port = row.Pg_port
-	//连接db
+	//连接数据库
 	var conn *pgx.Conn
 	conn, err = pgx.Connect(config)
 	if err != nil {
@@ -2780,6 +2812,3000 @@ func promote_get_ip_bind_statusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 /*
+功能描述：巡检报告生成接口
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_makeHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_makeHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "巡检报告生成－－节点ID号为[" + r.FormValue("id") + "]－－"
+
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//判断report_name是否为空
+	if r.FormValue("report_name") == "" {
+		error_msg = error_msg + "巡检报告名称不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	row := <-row_chan
+
+	//重新获取节点的状态
+	go getnode_type_and_status(row_chan, row)
+	row = <-row_chan
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	var sql string
+	var inspection_report_id int
+
+	sql = `
+    INSERT INTO inspection_report
+    (
+        nodeid,report_name, 
+		createtime,username
+    ) 
+    VALUES
+    (   
+        $1,$2,
+	    now(),$3
+    ) returning id    
+    `
+	rows, err := conn.Query(sql, r.FormValue("id"), r.FormValue("report_name"), username)
+
+	if err != nil {
+		error_msg = error_msg + "插入主表记录失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	} else {
+		if rows.Next() {
+			err = rows.Scan(&inspection_report_id)
+			if err != nil {
+				error_msg = error_msg + "提取主表数据失败，详情：" + err.Error()
+				OutputJson(w, "FAIL", error_msg, 0)
+				go write_log(remote_ip, modlename, username, "Error", error_msg)
+				return
+			}
+		} else {
+			error_msg = error_msg + "无法获取新增报告的ID号"
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+	}
+
+	//异步数据库统计生成
+	DatabaseData_chan := make(chan DatabaseData)
+	go inspection_report_database_make(inspection_report_id, row, DatabaseData_chan)
+	databases := <-DatabaseData_chan
+	if databases.Err != "" {
+		error_msg = error_msg + databases.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+
+		//数据出错异步删除巡检报告
+		delete_chan := make(chan Stdout_and_stderr)
+		go inspection_report_delete(inspection_report_id, delete_chan)
+		return
+	}
+
+	chan_num := 2 + databases.Total*2
+	end := make(chan Stdout_and_stderr, chan_num)
+	//异步生成数据表和索引
+	for i := 0; i < databases.Total; i++ {
+		row.Pg_database = databases.Rows[i]
+		go inspection_report_table_make(inspection_report_id, row, end)
+		go inspection_report_index_make(inspection_report_id, row, end)
+	}
+	//异步生成用户角色
+	go inspection_report_role_make(inspection_report_id, row, end)
+	//异步表空间统计生成
+	go inspection_report_tablespace_make(inspection_report_id, row, end)
+
+	//获取角色统计生成结果
+	var out Stdout_and_stderr
+	out.Stdout = ""
+	out.Stderr = ""
+	for i := 0; i < chan_num; i++ {
+		t := <-end
+		if t.Stderr != "" {
+			out = t
+		}
+	}
+	if out.Stderr != "" {
+		//数据出错异步删除巡检报告
+		error_msg = error_msg + out.Stderr
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+
+		delete_chan := make(chan Stdout_and_stderr)
+		go inspection_report_delete(inspection_report_id, delete_chan)
+		return
+	}
+	//状态统计
+	go inspection_report_state_make(inspection_report_id, row, end)
+	t := <-end
+	if t.Stderr != "" {
+		error_msg = error_msg + t.Stderr
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+
+		//生活数据出错异步删除巡检报告
+		delete_chan := make(chan Stdout_and_stderr)
+		go inspection_report_delete(inspection_report_id, delete_chan)
+		return
+	}
+
+	//表空间其它字段值异步更新
+	go inspection_report_tablespace_update(inspection_report_id)
+	//角色其它字段值异步更新
+	go inspection_report_role_update(inspection_report_id)
+	//数据库其它字段值异步更新
+	go inspection_report_database_update(inspection_report_id)
+
+	go write_log(remote_ip, modlename, username, "Log", error_msg+"报告的ID号为："+fmt.Sprintf("%d", inspection_report_id))
+	OutputJson(w, "SUCCESS", "创建巡检报告成功", 0)
+}
+
+/*
+功能描述：巡检报告－－获取巡检报告列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_listHandler(w http.ResponseWriter, r *http.Request) {
+	var err error
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "巡检报告－－获取巡检报告列表－－节点ID号[" + r.FormValue("id") + "]－－"
+
+	//巡检报告列表返回记录结构
+	type Rec struct {
+		Id          int    `json:"id"`
+		Report_name string `json:"report_name"`
+		Createtime  string `json:"createtime"`
+		Username    string `json:"username"`
+	}
+	type RecData struct {
+		Total int   `json:"total"`
+		Rows  []Rec `json:"rows"`
+	}
+
+	var data RecData = RecData{}
+	data.Rows = make([]Rec, 0)
+	data.Total = 0
+	var rec Rec
+
+	var sql string
+
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点ID号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,report_name,
+		createtime::timestamp(0)::text,username
+	FROM 
+		inspection_report
+	WHERE
+		nodeid=$1
+	ORDER BY
+		id DESC
+    `
+	rows, err := conn.Query(sql, id)
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(&rec.Id, &rec.Report_name, &rec.Createtime, &rec.Username)
+		if err != nil {
+			error_msg = error_msg + "提取数据失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：巡检报告－－状态统计
+
+参数说明：
+inspection_report_id  -- 巡检报表－系统编号
+row －－ 节点资料
+
+返回值说明：
+s -- 通道返回一个Stdout_and_stderr结构体
+*/
+
+//定义表空间记录struct
+type Inspection_report_state struct {
+	Id      int    `json:"id"`
+	Subject string `json:"subject"`
+	Val     string `json:"val"`
+}
+
+//定义列表返回的struct
+type Inspection_report_stateData struct {
+	Total int                       `json:"total"`
+	Rows  []Inspection_report_state `json:"rows"`
+	Err   string                    `json:"err"`
+}
+
+func inspection_report_state_make(inspection_report_id int, row Row, s chan Stdout_and_stderr) {
+	var err error
+	var error_msg string
+	//定义返回的struct
+	var out Stdout_and_stderr
+	var sql string
+
+	out.Stdout = ""
+	out.Stderr = ""
+	error_msg = "状态统计－－"
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Stderr = error_msg + "连接pgcluster数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+	INSERT INTO inspection_report_state
+	(
+		inspection_report_id,
+		subject,
+		val
+	)
+	SELECT
+		` + fmt.Sprintf("%d", inspection_report_id) + ` AS inspection_report_id,
+		t.*
+	FROM (
+			SELECT
+				'主机IP' AS subject,
+				'` + sql_data_encode(row.Host) + `' AS val
+			UNION ALL
+			SELECT
+				'服务管理员' AS subject,
+				'` + sql_data_encode(row.Ssh_user) + `' AS val
+			UNION ALL
+			SELECT
+				'服务器端程序所在目录' AS subject,
+				'` + sql_data_encode(row.Pg_bin) + `' AS val
+			UNION ALL
+			SELECT
+				'data目录路径' AS subject,
+				'` + sql_data_encode(row.Pg_data) + `' AS val
+			UNION ALL
+			SELECT
+				'访问日志目录路径' AS subject,
+				'` + sql_data_encode(row.Pg_log) + `' AS val
+			UNION ALL
+			SELECT
+				'服务端口号' AS subject,
+				'` + sql_data_encode(fmt.Sprintf("%d", row.Pg_port)) + `' AS val
+			UNION ALL
+			SELECT
+				'版本号' AS subject,
+				'` + sql_data_encode(row.Pg_version) + `' AS val
+			UNION ALL
+			SELECT
+				'节点类号' AS subject,
+				'` + sql_data_encode(row.Service_type) + `' AS val
+			UNION ALL
+			SELECT
+				'占用空间' AS subject,
+				pg_catalog.pg_size_pretty(sum(spcsize))::TEXT AS val
+			FROM
+				inspection_report_tablespace
+			WHERE
+				inspection_report_tablespace.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+			UNION ALL
+			SELECT
+				'表空间数' AS subject,
+				COUNT(1)::TEXT AS val
+			FROM
+				inspection_report_tablespace
+			WHERE
+				inspection_report_tablespace.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+			UNION ALL
+			SELECT
+				'角色数' AS subject,
+				COUNT(1)::TEXT AS val
+			FROM
+				inspection_report_role
+			WHERE
+				inspection_report_role.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+			UNION ALL
+			SELECT
+				'数据库数' AS subject,
+				COUNT(1)::TEXT AS val
+			FROM
+				inspection_report_database
+			WHERE
+				inspection_report_database.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+			UNION ALL
+			SELECT
+				'数据表数' AS subject,
+				COUNT(1)::TEXT AS val
+			FROM
+				inspection_report_table
+			WHERE
+				inspection_report_table.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+			UNION ALL
+			SELECT
+				'索引数' AS subject,
+				COUNT(1)::TEXT AS val
+			FROM
+				inspection_report_index
+			WHERE
+				inspection_report_index.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+		) AS t
+	`
+
+	_, err = conn.Exec(sql)
+
+	if err != nil {
+		out.Stderr = error_msg + "插入数据失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+
+	out.Stdout = ""
+	out.Stderr = ""
+	s <- out
+	return
+}
+
+/*
+功能描述：巡检报告－－状态列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_state_listHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_state_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "获取巡检报告－－获取状态统计信息ID号为[" + r.FormValue("inspection_report_id") + "]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取数据
+	data_chan := make(chan Inspection_report_stateData)
+	go inspection_report_state_record(inspection_report_id, sql_sort_limit(r), data_chan)
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM inspection_report_state WHERE inspection_report_id=" + fmt.Sprintf("%d", inspection_report_id)
+	total_chan := make(chan Totalnum)
+	go gettotalnum(sql, total_chan)
+
+	//返回异步获取数据结果
+	data := <-data_chan
+	if data.Err != "" {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：获取巡检报告－－索引统计信息
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+sql_sort_limit         -- 需要分页sql语句
+
+返回值说明：
+data_chan -- chan Inspection_report_indexData
+*/
+
+func inspection_report_state_record(inspection_report_id int, sql_sort_limit string, data_chan chan Inspection_report_stateData) {
+	var err error
+	var sql string
+	var rec Inspection_report_state
+	var data Inspection_report_stateData = Inspection_report_stateData{}
+	data.Rows = make([]Inspection_report_state, 0)
+	data.Total = 0
+	data.Err = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		data.Err = "连接数据库失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,
+		subject,
+		val
+	FROM 
+		inspection_report_state
+	WHERE
+		inspection_report_id=$1
+    ` + sql_sort_limit
+
+	rows, err := conn.Query(sql, inspection_report_id)
+	if err != nil {
+		data.Err = "查询资料失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(&rec.Id, &rec.Subject, &rec.Val)
+		if err != nil {
+			data.Err = "提取数据失败－－详情：" + err.Error()
+			data_chan <- data
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	data_chan <- data
+	return
+}
+
+/*
+功能描述：巡检报告－－角色统计
+
+参数说明：
+inspection_report_id  -- 巡检报表－系统编号
+row －－ 节点资料
+
+返回值说明：
+s -- 通道返回一个Stdout_and_stderr结构体
+*/
+
+//定义角色记录struct
+type Inspection_report_role struct {
+	Id                int    `json:"id"`
+	Rolname           string `json:"rolname"`
+	Rolcomment        string `json:"rolcomment"`
+	Rolsuper          string `json:"rolsuper"`
+	Rolcreaterole     string `json:"rolcreaterole"`
+	Rolcreatedb       string `json:"rolcreatedb"`
+	Rolcanlogin       string `json:"rolcanlogin"`
+	Rolreplication    string `json:"rolreplication"`
+	Rolconnlimit      int    `json:"rolconnlimit"`
+	Rolpassword_state string `json:"rolpassword_state"`
+	Rolvaliduntil     string `json:"rolvaliduntil"`
+	Datnum            int64  `json:"datnum"`
+	Tablenum          int64  `json:"tablenum"`
+	Indexnum          int64  `json:"indexnum"`
+}
+
+//定义列表返回的struct
+type Inspection_report_roleData struct {
+	Total int                      `json:"total"`
+	Rows  []Inspection_report_role `json:"rows"`
+	Err   string                   `json:"err"`
+}
+
+func inspection_report_role_make(inspection_report_id int, row Row, s chan Stdout_and_stderr) {
+	var err error
+	var error_msg string
+	//定义返回的struct
+	var out Stdout_and_stderr
+	var rec Inspection_report_role
+	var sql string
+
+	out.Stdout = ""
+	out.Stderr = ""
+	error_msg = "角色统计－－"
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Stderr = error_msg + "连接pgcluster数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//连接要统计的节点
+	var nodeconn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = row.Host
+	config.User = row.Pg_user
+	config.Password = row.Pg_password
+	config.Database = row.Pg_database
+	config.Port = row.Pg_port
+
+	nodeconn, err = pgx.Connect(config)
+	if err != nil {
+		out.Stderr = error_msg + "连接统计库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer nodeconn.Close()
+
+	sql = `
+	SELECT
+		pg_authid.rolname,coalesce(pg_shdescription.description,'') AS rolcomment,
+		CASE WHEN pg_authid.rolsuper THEN '是' ELSE '否' END AS rolsuper,CASE WHEN pg_authid.rolcreaterole THEN '是' ELSE '否' END AS rolcreaterole,
+		CASE WHEN pg_authid.rolcreaterole THEN '是' ELSE '否' END AS rolcreaterole,CASE WHEN pg_authid.rolcreatedb THEN '是' ELSE '否' END AS rolcreatedb,
+		CASE WHEN pg_authid.rolcanlogin THEN '是' ELSE '否' END AS rolcanlogin,CASE WHEN pg_authid.rolreplication THEN '是' ELSE '否' END AS rolreplication,
+		pg_authid.rolconnlimit,CASE WHEN char_length(pg_authid.rolpassword)=35 AND substring(pg_authid.rolpassword from 1 for 3)='md5' THEN '加密' WHEN pg_authid.rolpassword IS NOT NULL THEN '未加密' ELSE '无密码' END AS rolpassword_state,
+		COALESCE(pg_authid.rolvaliduntil::TEXT,'') AS rolvaliduntil 
+	FROM
+		pg_catalog.pg_authid AS pg_authid
+		LEFT OUTER JOIN pg_catalog.pg_shdescription AS pg_shdescription ON pg_shdescription.objoid=pg_authid.oid
+		LEFT OUTER JOIN (
+		    SELECT 
+			    pg_class.oid 
+			FROM 
+			    pg_catalog.pg_class AS pg_class
+				INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_class.relnamespace=pg_namespace.oid  
+			WHERE
+				pg_class.relname='pg_tablespace' 
+				AND pg_namespace.nspname='pg_authid' 
+		) AS classoid ON classoid.oid=pg_shdescription.classoid
+	ORDER BY
+		pg_authid.rolname
+	`
+	rows, err := nodeconn.Query(sql)
+	if err != nil {
+		out.Stderr = error_msg + "查询资料失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Rolname, &rec.Rolcomment,
+			&rec.Rolsuper, &rec.Rolcreaterole,
+			&rec.Rolcreaterole, &rec.Rolcreatedb,
+			&rec.Rolcanlogin, &rec.Rolreplication,
+			&rec.Rolconnlimit, &rec.Rolpassword_state,
+			&rec.Rolvaliduntil)
+		if err != nil {
+			out.Stderr = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+		sql = `
+	    INSERT INTO inspection_report_role
+	    (
+	        inspection_report_id,
+			rolname,rolcomment, 
+			rolsuper,rolcreaterole,
+			rolcreatedb,rolcanlogin,
+			rolreplication,rolconnlimit,
+			rolpassword_state,rolvaliduntil
+	    )
+		VALUES
+		(
+			$1,
+			$2,$3,
+			$4,$5,
+			$6,$7,
+			$8,$9,
+			$10,NULLIF($11,'')::TIMESTAMP
+		) 
+	    `
+		_, err = conn.Exec(sql,
+			inspection_report_id,
+			rec.Rolname, rec.Rolcomment,
+			rec.Rolsuper, rec.Rolcreaterole,
+			rec.Rolcreatedb, rec.Rolcanlogin,
+			rec.Rolreplication, rec.Rolconnlimit,
+			rec.Rolpassword_state, rec.Rolvaliduntil)
+
+		if err != nil {
+			out.Stderr = error_msg + "插入数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+	}
+
+	out.Stdout = ""
+	out.Stderr = ""
+	s <- out
+	return
+}
+
+/*
+功能描述：巡检报告－－角色列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_role_listHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_role_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "获取巡检报告－－获取角色统计信息ID号为[" + r.FormValue("inspection_report_id") + "]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告ID号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取数据
+	data_chan := make(chan Inspection_report_roleData)
+	go inspection_report_role_record(inspection_report_id, sql_sort_limit(r), data_chan)
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM inspection_report_role WHERE inspection_report_id=" + fmt.Sprintf("%d", inspection_report_id)
+	total_chan := make(chan Totalnum)
+	go gettotalnum(sql, total_chan)
+
+	//返回异步获取数据结果
+	data := <-data_chan
+	if data.Err != "" {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + total.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：获取巡检报告－－角色统计信息
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+sql_sort_limit         -- 需要分页sql语句
+
+返回值说明：
+data_chan -- chan Inspection_report_roleData
+*/
+
+func inspection_report_role_record(inspection_report_id int, sql_sort_limit string, data_chan chan Inspection_report_roleData) {
+	var err error
+	var sql string
+	var rec Inspection_report_role
+	var data Inspection_report_roleData = Inspection_report_roleData{}
+	data.Rows = make([]Inspection_report_role, 0)
+	data.Total = 0
+	data.Err = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		data.Err = "连接数据库失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,rolname,rolcomment,
+		rolsuper,rolsuper,
+		rolcreaterole,rolcreatedb,
+		rolcanlogin,rolreplication,
+		rolconnlimit,rolpassword_state,
+		COALESCE(rolvaliduntil::text,'') AS rolvaliduntil,COALESCE(datnum,0) AS datnum,
+		COALESCE(tablenum,0) AS tablenum_show,COALESCE(indexnum,0) AS indexnum_show
+	FROM 
+		inspection_report_role
+	WHERE
+		inspection_report_id=$1
+    ` + sql_sort_limit
+
+	rows, err := conn.Query(sql, inspection_report_id)
+	if err != nil {
+		data.Err = "查询资料失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Id,
+			&rec.Rolname, &rec.Rolcomment,
+			&rec.Rolsuper, &rec.Rolcreaterole,
+			&rec.Rolcreaterole, &rec.Rolcreatedb,
+			&rec.Rolcanlogin, &rec.Rolreplication,
+			&rec.Rolconnlimit, &rec.Rolpassword_state,
+			&rec.Rolvaliduntil, &rec.Datnum,
+			&rec.Tablenum, &rec.Indexnum)
+		if err != nil {
+			data.Err = "提取数据失败－－详情：" + err.Error()
+			data_chan <- data
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	data_chan <- data
+	return
+}
+
+/*
+功能描述：获取巡检报告－－角色其它字段异步更新
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+
+返回值说明：无
+
+*/
+
+func inspection_report_role_update(inspection_report_id int) {
+	var err error
+	remote_ip := "127.0.0.1"
+	modlename := "inspection_report_role_update"
+	username := "admin"
+	var sql string
+	error_msg := "巡检报告－－角色其它字更新inspection_report_id为[" + fmt.Sprintf("%d", inspection_report_id) + "]－－"
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg := error_msg + "连接数据库出错－－详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+	UPDATE 
+		inspection_report_role
+	SET
+		datnum=0,tablenum=0,indexnum=0
+	WHERE
+		inspection_report_role.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	
+	UPDATE 
+		inspection_report_role
+	SET
+		datnum=t.num
+	FROM
+		(SELECT COUNT(1) AS num,datdba FROM inspection_report_database WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + ` GROUP BY datdba) AS t
+	WHERE
+		inspection_report_role.rolname=t.datdba
+		AND inspection_report_role.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	
+	UPDATE 
+		inspection_report_role
+	SET
+		tablenum=t.num
+	FROM
+		(SELECT COUNT(1) AS num,tableowner FROM inspection_report_table WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + ` GROUP BY tableowner) AS t
+	WHERE
+		inspection_report_role.rolname=t.tableowner
+		AND inspection_report_role.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	
+	UPDATE 
+		inspection_report_role
+	SET
+		indexnum=t.num
+	FROM
+		(SELECT COUNT(1) AS num,indexowner FROM inspection_report_index WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + ` GROUP BY indexowner) AS t
+	WHERE
+		inspection_report_role.rolname=t.indexowner
+		AND inspection_report_role.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+	 `
+	_, err = conn.Exec(sql)
+
+	if err != nil {
+		error_msg := error_msg + "更新数据出错－－详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+}
+
+/*
+功能描述：巡检报告－－表空间统计
+
+参数说明：
+inspection_report_id  -- 巡检报表－系统编号
+row －－ 节点资料
+
+返回值说明：
+s -- 通道返回一个Stdout_and_stderr结构体
+*/
+
+//定义表空间记录struct
+type Inspection_report_tablespace struct {
+	Id         int    `json:"id"`
+	Spcname    string `json:"spcname"`
+	Spccomment string `json:"spccomment"`
+	Spcowner   string `json:"spcowner"`
+	Location   string `json:"location"`
+	Spcsize    string `json:"spcsize"`
+	Tablenum   int64  `json:"tablenum"`
+	Indexnum   int64  `json:"indexnum"`
+}
+
+//定义列表返回的struct
+type Inspection_report_tablespaceData struct {
+	Total int                            `json:"total"`
+	Rows  []Inspection_report_tablespace `json:"rows"`
+	Err   string                         `json:"err"`
+}
+
+func inspection_report_tablespace_make(inspection_report_id int, row Row, s chan Stdout_and_stderr) {
+	var err error
+	var error_msg string
+	//定义返回的struct
+	var out Stdout_and_stderr
+
+	var rec Inspection_report_tablespace
+	var sql string
+
+	out.Stdout = ""
+	out.Stderr = ""
+	error_msg = "表空间统计－－"
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Stderr = error_msg + "连接pgcluster数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//连接要统计的节点
+	var nodeconn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = row.Host
+	config.User = row.Pg_user
+	config.Password = row.Pg_password
+	config.Database = row.Pg_database
+	config.Port = row.Pg_port
+
+	nodeconn, err = pgx.Connect(config)
+	if err != nil {
+		out.Stderr = error_msg + "连接统计库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer nodeconn.Close()
+
+	sql = `
+	SELECT
+		pg_tablespace.spcname,
+		coalesce(pg_shdescription.description,'') AS spccomment,
+		pg_authid.rolname AS spcowner,
+		pg_catalog.pg_tablespace_location(pg_tablespace.oid) AS location,
+		pg_catalog.pg_tablespace_size(pg_tablespace.oid)::text AS spcsize
+	FROM
+		pg_catalog.pg_tablespace AS pg_tablespace
+		INNER JOIN pg_catalog.pg_authid AS pg_authid ON pg_tablespace.spcowner=pg_authid.oid
+		LEFT OUTER JOIN pg_catalog.pg_shdescription AS pg_shdescription ON pg_shdescription.objoid=pg_tablespace.oid
+		LEFT OUTER JOIN (
+		    SELECT 
+			    pg_class.oid 
+			FROM 
+			    pg_catalog.pg_class AS pg_class
+				INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_class.relnamespace=pg_namespace.oid  
+			WHERE
+				pg_class.relname='pg_tablespace' 
+				AND pg_namespace.nspname='pg_catalog' 
+		) AS classoid ON classoid.oid=pg_shdescription.classoid
+	ORDER BY
+		pg_tablespace.spcname
+	`
+
+	rows, err := nodeconn.Query(sql)
+	if err != nil {
+		out.Stderr = error_msg + "查询资料失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(&rec.Spcname, &rec.Spccomment, &rec.Spcowner, &rec.Location, &rec.Spcsize)
+		if err != nil {
+			out.Stderr = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+		sql = `
+	    INSERT INTO inspection_report_tablespace
+	    (
+	        inspection_report_id,
+			spcname,spccomment,
+			spcowner,location,
+			spcsize
+	    )
+		VALUES
+		(
+			$1,
+			$2,$3,
+			$4,$5,
+			$6
+		) 
+	    `
+		_, err = conn.Exec(sql,
+			inspection_report_id,
+			rec.Spcname, rec.Spccomment,
+			rec.Spcowner, rec.Location,
+			rec.Spcsize)
+
+		if err != nil {
+			out.Stderr = error_msg + "插入数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+	}
+
+	out.Stdout = ""
+	out.Stderr = ""
+	s <- out
+	return
+}
+
+/*
+功能描述：巡检报告－－表空间列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_tablespace_listHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_tablespace_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "获取巡检报告－－获取表空间统计信息ID号为[" + r.FormValue("inspection_report_id") + "]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取数据
+	data_chan := make(chan Inspection_report_tablespaceData)
+	go inspection_report_tablespace_record(inspection_report_id, sql_sort_limit(r), data_chan)
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM inspection_report_tablespace WHERE inspection_report_id=" + fmt.Sprintf("%d", inspection_report_id)
+	total_chan := make(chan Totalnum)
+	go gettotalnum(sql, total_chan)
+
+	//返回异步获取数据结果
+	data := <-data_chan
+	if data.Err != "" {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + total.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：获取巡检报告－－表空间统计信息
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+sql_sort_limit         -- 需要分页sql语句
+
+返回值说明：
+data_chan -- chan Inspection_report_tablespaceData
+*/
+
+func inspection_report_tablespace_record(inspection_report_id int, sql_sort_limit string, data_chan chan Inspection_report_tablespaceData) {
+	var err error
+	var sql string
+	var rec Inspection_report_tablespace
+	var data Inspection_report_tablespaceData = Inspection_report_tablespaceData{}
+	data.Rows = make([]Inspection_report_tablespace, 0)
+	data.Total = 0
+	data.Err = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		data.Err = "连接数据库失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,
+		spcname,spccomment,
+		spcowner,location,
+		pg_catalog.pg_size_pretty(spcsize) AS spcsize_show,COALESCE(tablenum,0) AS tablenum_show,
+		COALESCE(indexnum,0) AS indexnum_show
+	FROM 
+		inspection_report_tablespace
+	WHERE
+		inspection_report_id=$1
+    ` + sql_sort_limit
+
+	rows, err := conn.Query(sql, inspection_report_id)
+	if err != nil {
+		data.Err = "查询资料失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(&rec.Id, &rec.Spcname, &rec.Spccomment, &rec.Spcowner, &rec.Location, &rec.Spcsize, &rec.Tablenum, &rec.Indexnum)
+		if err != nil {
+			data.Err = "提取数据失败－－详情：" + err.Error()
+			data_chan <- data
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	data_chan <- data
+	return
+}
+
+/*
+功能描述：获取巡检报告－－表空间其它字段异步更新
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+
+返回值说明：无
+
+*/
+
+func inspection_report_tablespace_update(inspection_report_id int) {
+	var err error
+	remote_ip := "127.0.0.1"
+	modlename := "inspection_report_tablespace_update"
+	username := "admin"
+	var sql string
+	error_msg := "巡检报告－－表空间其它字更新inspection_report_id为[" + fmt.Sprintf("%d", inspection_report_id) + "]－－"
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg := error_msg + "连接数据库出错－－详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+	UPDATE 
+		inspection_report_tablespace
+	SET
+		tablenum=0,indexnum=0
+	WHERE
+		inspection_report_tablespace.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	
+	UPDATE 
+		inspection_report_tablespace
+	SET
+		tablenum=t.num
+	FROM
+		(SELECT COUNT(1) AS num,tablespace FROM inspection_report_table WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + ` GROUP BY tablespace) AS t
+	WHERE
+		inspection_report_tablespace.spcname=t.tablespace
+		AND inspection_report_tablespace.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	
+	UPDATE 
+		inspection_report_tablespace
+	SET
+		indexnum=t.num
+	FROM
+		(SELECT COUNT(1) AS num,tablespace FROM inspection_report_index WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + ` GROUP BY tablespace) AS t
+	WHERE
+		inspection_report_tablespace.spcname=t.tablespace
+		AND inspection_report_tablespace.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+	 `
+	_, err = conn.Exec(sql)
+
+	if err != nil {
+		error_msg := error_msg + "更新数据出错－－详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+}
+
+/*
+功能描述：巡检报告－－数据库统计
+
+参数说明：
+inspection_report_id  -- 巡检报表－系统编号
+row －－ 节点资料
+
+返回值说明：
+s -- 通道返回一个Stdout_and_stderr结构体
+*/
+
+//定义数据库记录struct
+type Inspection_report_database struct {
+	Id            int    `json:"id"`
+	Datname       string `json:"datname"`
+	Datcomment    string `json:"datcomment"`
+	Datdba        string `json:"datdba"`
+	Encoding      string `json:"encoding"`
+	Datcollate    string `json:"datcollate"`
+	Datctype      string `json:"datctype"`
+	Datistemplate string `json:"datistemplate"`
+	Datallowconn  string `json:"datallowconn"`
+	Datconnlimit  int    `json:"datconnlimit"`
+	Dattablespace string `json:"dattablespace"`
+	Datsize       string `json:"datsize"`
+	Tablenum      int64  `json:"tablenum"`
+	Indexnum      int64  `json:"indexnum"`
+}
+
+//定义列表返回的struct
+type Inspection_report_databaseData struct {
+	Total int                          `json:"total"`
+	Rows  []Inspection_report_database `json:"rows"`
+	Err   string                       `json:"err"`
+}
+
+//定义“巡检报告－－数据库统计”返回的数据库列表
+type DatabaseData struct {
+	Total int      `json:"total"`
+	Rows  []string `json:"rows"`
+	Err   string   `json:"err"`
+}
+
+func inspection_report_database_make(inspection_report_id int, row Row, s chan DatabaseData) {
+	var err error
+	var error_msg string
+	//定义返回的struct
+	var out DatabaseData
+
+	out.Rows = make([]string, 0)
+	out.Total = 0
+	out.Err = ""
+
+	var rec Inspection_report_database
+	var sql string
+
+	error_msg = "数据库统计－－"
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Err = error_msg + "连接pgcluster数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//连接要统计的节点
+	var nodeconn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = row.Host
+	config.User = row.Pg_user
+	config.Password = row.Pg_password
+	config.Database = row.Pg_database
+	config.Port = row.Pg_port
+
+	nodeconn, err = pgx.Connect(config)
+	if err != nil {
+		out.Err = error_msg + "连接统计库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer nodeconn.Close()
+
+	sql = `
+	SELECT
+		pg_database.datname,coalesce(pg_shdescription.description,'') AS datcomment,
+		pg_authid.rolname AS datdba,pg_encoding_to_char(pg_database.encoding) AS encoding,
+		pg_database.datcollate,pg_database.datctype,
+		CASE WHEN pg_database.datistemplate THEN '是' ELSE '否' END AS datistemplate,CASE WHEN pg_database.datallowconn THEN '是' ELSE '否' END AS datallowconn,
+		pg_database.datconnlimit,pg_tablespace.spcname AS dattablespace,
+		pg_catalog.pg_database_size(pg_database.oid)::text AS datsize
+	FROM
+		pg_catalog.pg_database AS pg_database 
+		INNER JOIN pg_catalog.pg_tablespace AS pg_tablespace ON pg_tablespace.oid=pg_database.dattablespace
+		INNER JOIN pg_catalog.pg_authid AS pg_authid ON pg_authid.oid=pg_database.datdba
+		LEFT OUTER JOIN pg_catalog.pg_shdescription AS pg_shdescription ON pg_shdescription.objoid=pg_database.oid
+		LEFT OUTER JOIN (
+		    SELECT 
+			    pg_class.oid 
+			FROM 
+			    pg_catalog.pg_class AS pg_class
+				INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_class.relnamespace=pg_namespace.oid  
+			WHERE
+				pg_class.relname='pg_database' 
+				AND pg_namespace.nspname='pg_catalog' 
+		) AS classoid ON classoid.oid=pg_shdescription.classoid
+	ORDER BY
+		pg_database.datname
+	`
+	rows, err := nodeconn.Query(sql)
+	if err != nil {
+		out.Err = error_msg + "查询资料失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Datname, &rec.Datcomment,
+			&rec.Datdba, &rec.Encoding,
+			&rec.Datcollate, &rec.Datctype,
+			&rec.Datistemplate, &rec.Datallowconn,
+			&rec.Datconnlimit, &rec.Dattablespace,
+			&rec.Datsize)
+		if err != nil {
+			out.Err = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+		sql = `
+	    INSERT INTO inspection_report_database
+	    (
+			inspection_report_id,
+			datname,datcomment,
+			datdba,encoding,
+			datcollate,datctype,
+			datistemplate,datallowconn,
+			datconnlimit,dattablespace,
+			datsize
+	    )
+		VALUES
+		(
+			$1,
+			$2,$3,
+			$4,$5,
+			$6,$7,
+			$8,$9,
+			$10,$11,
+			$12
+		) 
+	    `
+
+		_, err = conn.Exec(sql,
+			inspection_report_id,
+			rec.Datname, rec.Datcomment,
+			rec.Datdba, rec.Encoding,
+			rec.Datcollate, rec.Datctype,
+			rec.Datistemplate, rec.Datallowconn,
+			rec.Datconnlimit, rec.Dattablespace,
+			rec.Datsize)
+
+		if err != nil {
+			out.Err = error_msg + "插入数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+
+		if rec.Datallowconn == "是" {
+			out.Rows = append(out.Rows, rec.Datname)
+			out.Total = out.Total + 1
+		}
+	}
+
+	out.Err = ""
+	s <- out
+	return
+}
+
+/*
+功能描述：巡检报告－－数据库列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_database_listHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_database_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "获取巡检报告－－获取数据库统计信息ID号为[" + r.FormValue("inspection_report_id") + "]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取数据
+	data_chan := make(chan Inspection_report_databaseData)
+	go inspection_report_database_record(inspection_report_id, sql_sort_limit(r), data_chan)
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM inspection_report_database WHERE inspection_report_id=" + fmt.Sprintf("%d", inspection_report_id)
+	total_chan := make(chan Totalnum)
+	go gettotalnum(sql, total_chan)
+
+	//返回异步获取数据结果
+	data := <-data_chan
+	if data.Err != "" {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + total.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：获取巡检报告－－数据库统计信息
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+sql_sort_limit         -- 需要分页sql语句
+
+返回值说明：
+data_chan -- chan Inspection_report_databaseData
+*/
+
+func inspection_report_database_record(inspection_report_id int, sql_sort_limit string, data_chan chan Inspection_report_databaseData) {
+	var err error
+	var sql string
+	var rec Inspection_report_database
+	var data Inspection_report_databaseData = Inspection_report_databaseData{}
+	data.Rows = make([]Inspection_report_database, 0)
+	data.Total = 0
+	data.Err = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		data.Err = "连接数据库失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,
+		datname,datcomment,
+		datdba,encoding,
+		datcollate,datctype,
+		datistemplate,datallowconn,
+		datconnlimit,dattablespace,
+		pg_catalog.pg_size_pretty(datsize) AS datsize_show,COALESCE(tablenum,0) AS tablenum_show,
+		COALESCE(indexnum,0) AS indexnum_show
+	FROM 
+		inspection_report_database
+	WHERE
+		inspection_report_id=$1
+    ` + sql_sort_limit
+
+	rows, err := conn.Query(sql, inspection_report_id)
+	if err != nil {
+		data.Err = "查询资料失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Id,
+			&rec.Datname, &rec.Datcomment,
+			&rec.Datdba, &rec.Encoding,
+			&rec.Datcollate, &rec.Datctype,
+			&rec.Datistemplate, &rec.Datallowconn,
+			&rec.Datconnlimit, &rec.Dattablespace,
+			&rec.Datsize, &rec.Tablenum,
+			&rec.Indexnum)
+		if err != nil {
+			data.Err = "提取数据失败－－详情：" + err.Error()
+			data_chan <- data
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	data_chan <- data
+	return
+}
+
+/*
+功能描述：获取巡检报告－－数据库其它字段异步更新
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+
+返回值说明：无
+
+*/
+
+func inspection_report_database_update(inspection_report_id int) {
+	var err error
+	remote_ip := "127.0.0.1"
+	modlename := "inspection_report_database_update"
+	username := "admin"
+	var sql string
+	error_msg := "巡检报告－－数据库其它字更新inspection_report_id为[" + fmt.Sprintf("%d", inspection_report_id) + "]－－"
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg := error_msg + "连接数据库出错－－详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+	UPDATE 
+		inspection_report_database
+	SET
+		tablenum=0,indexnum=0
+	WHERE
+		inspection_report_database.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	
+	UPDATE 
+		inspection_report_database
+	SET
+		tablenum=t.num
+	FROM
+		(SELECT COUNT(1) AS num,datname FROM inspection_report_table WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + ` GROUP BY datname) AS t
+	WHERE
+		inspection_report_database.datname=t.datname
+		AND inspection_report_database.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	
+	UPDATE 
+		inspection_report_database
+	SET
+		indexnum=t.num
+	FROM
+		(SELECT COUNT(1) AS num,datname FROM inspection_report_index WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + ` GROUP BY datname) AS t
+	WHERE
+		inspection_report_database.datname=t.datname
+		AND inspection_report_database.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+	 `
+	_, err = conn.Exec(sql)
+
+	if err != nil {
+		error_msg := error_msg + "更新数据出错－－详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+}
+
+/*
+功能描述：巡检报告－－数据表统计
+
+参数说明：
+inspection_report_id  -- 巡检报表－系统编号
+row －－ 节点资料
+dattablespace --数据库默认表空间
+
+返回值说明：
+s -- 通道返回一个Stdout_and_stderr结构体
+*/
+
+//定义数据表记录struct
+
+type Inspection_report_table struct {
+	Id               int    `json:"id"`
+	Datname          string `json:"datname"`
+	Schemaname       string `json:"schemaname"`
+	Tablename        string `json:"tablename"`
+	Tablecomment     string `json:"tablecomment"`
+	Tableowner       string `json:"tableowner"`
+	Tablespace       string `json:"tablespace"`
+	Rownum           int64  `json:"rownum"`
+	Relationsize     string `json:"relationsize"`
+	Indexnum         int    `json:"indexnum"`
+	Indexsize        string `json:"indexsize"`
+	Tablesize        string `json:"tablesize"`
+	Seq_scan         int64  `json:"seq_scan"`
+	Seq_tup_read     int64  `json:"seq_tup_read"`
+	Idx_scan         int64  `json:"idx_scan"`
+	Idx_tup_fetch    int64  `json:"idx_tup_fetch"`
+	Last_vacuum      string `json:"last_vacuum"`
+	Last_autovacuum  string `json:"last_autovacuum"`
+	Last_analyze     string `json:"last_analyze"`
+	Last_autoanalyze string `json:"last_autoanalyze"`
+}
+
+//定义列表返回的struct
+type Inspection_report_tableData struct {
+	Total int                       `json:"total"`
+	Rows  []Inspection_report_table `json:"rows"`
+	Err   string                    `json:"err"`
+}
+
+func inspection_report_table_make(inspection_report_id int, row Row, s chan Stdout_and_stderr) {
+	var err error
+	var error_msg string
+	//定义返回的struct
+	var out Stdout_and_stderr
+	out.Stdout = ""
+	out.Stderr = ""
+
+	var rec Inspection_report_table
+	var sql string
+
+	error_msg = "数据表统计－－统计库为[" + row.Pg_database + "]－－"
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Stderr = error_msg + "连接pgcluster数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//连接要统计的节点
+	var nodeconn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = row.Host
+	config.User = row.Pg_user
+	config.Password = row.Pg_password
+	config.Database = row.Pg_database
+	config.Port = row.Pg_port
+
+	nodeconn, err = pgx.Connect(config)
+	if err != nil {
+		out.Stderr = error_msg + "连接统计库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer nodeconn.Close()
+
+	//获取数据库默认表空间
+	sql = `
+	SELECT
+		pg_tablespace.spcname AS dattablespace
+	FROM
+		pg_catalog.pg_database AS pg_database 
+		INNER JOIN pg_catalog.pg_tablespace AS pg_tablespace ON pg_tablespace.oid=pg_database.dattablespace
+	WHERE
+		pg_database.datname=$1
+	`
+	rows, err := nodeconn.Query(sql, row.Pg_database)
+	if err != nil {
+		out.Stderr = error_msg + "查询数据库默认表空间失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	var dattablespace string
+	if rows.Next() {
+		err = rows.Scan(&dattablespace)
+		if err != nil {
+			out.Stderr = error_msg + "获取数据库默认表空间数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+	}
+	rows.Close()
+
+	//获取该数据库的所有数据表
+	sql = `
+	SELECT
+		pg_namespace.nspname AS schemaname ,pg_class.relname AS tablename, 
+		COALESCE(pg_description.description,'') AS tablecomment,pg_authid.rolname AS tableowner,
+		COALESCE(pg_tablespace.spcname,'` + dattablespace + `') AS tablespace,pg_catalog.pg_table_size(pg_class.oid)::text AS relationsize,
+		COALESCE(indexnum.indexnum,0) AS indexnum,pg_catalog.pg_indexes_size(pg_class.oid)::text AS indexsize,
+		pg_catalog.pg_total_relation_size(pg_class.oid)::text AS tablesize,
+		COALESCE(pg_stat_all_tables.seq_scan,0) AS seq_scan, COALESCE(pg_stat_all_tables.seq_tup_read,0) AS seq_tup_read,
+		COALESCE(pg_stat_all_tables.idx_scan,0) AS idx_scan, COALESCE(pg_stat_all_tables.idx_tup_fetch,0) AS idx_tup_fetch,
+		COALESCE(pg_stat_all_tables.last_vacuum::TIMESTAMP(0)::TEXT,'') AS last_vacuum, COALESCE(pg_stat_all_tables.last_autovacuum::TIMESTAMP(0)::TEXT,'') AS last_autovacuum,
+		COALESCE(pg_stat_all_tables.last_analyze::TIMESTAMP(0)::TEXT,'') AS last_analyze, COALESCE(pg_stat_all_tables.last_autoanalyze::TIMESTAMP(0)::TEXT,'') AS last_autoanalyze
+	FROM
+		pg_catalog.pg_class AS pg_class
+		INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid=pg_class.relnamespace
+		LEFT OUTER JOIN pg_catalog.pg_description AS pg_description ON pg_description.objoid=pg_class.oid AND pg_description.objsubid=0
+		LEFT OUTER JOIN (
+		    SELECT 
+			    pg_class.oid 
+			FROM 
+			    pg_catalog.pg_class AS pg_class
+				INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_class.relnamespace=pg_namespace.oid  
+			WHERE
+				pg_class.relname='pg_class' 
+				AND pg_namespace.nspname='pg_catalog' 
+		) AS classoid ON classoid.oid=pg_description.classoid
+		INNER JOIN pg_catalog.pg_authid AS pg_authid ON pg_authid.oid=pg_class.relowner
+		LEFT OUTER JOIN pg_catalog.pg_tablespace AS pg_tablespace ON pg_tablespace.oid=pg_class.reltablespace
+		LEFT OUTER JOIN (
+			SELECT 
+				COUNT(1) AS indexnum,
+				indrelid 
+			FROM
+				pg_catalog.pg_index AS pg_index 
+			GROUP BY
+			 	pg_index.indrelid
+		) AS indexnum ON indexnum.indrelid=pg_class.oid
+		LEFT OUTER JOIN pg_catalog.pg_stat_all_tables AS pg_stat_all_tables ON pg_stat_all_tables.relid=pg_class.oid
+	WHERE
+		pg_class.relkind='r'
+	`
+	rows, err = nodeconn.Query(sql)
+	if err != nil {
+		out.Stderr = error_msg + "查询数据失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Schemaname, &rec.Tablename,
+			&rec.Tablecomment, &rec.Tableowner,
+			&rec.Tablespace, &rec.Relationsize,
+			&rec.Indexnum, &rec.Indexsize,
+			&rec.Tablesize,
+			&rec.Seq_scan, &rec.Seq_tup_read,
+			&rec.Idx_scan, &rec.Idx_tup_fetch,
+			&rec.Last_vacuum, &rec.Last_autovacuum,
+			&rec.Last_analyze, &rec.Last_autoanalyze)
+		if err != nil {
+			out.Stderr = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+
+		sql = `
+	    INSERT INTO inspection_report_table
+	    (
+	        inspection_report_id,
+			datname,schemaname,
+			tablename,tablecomment,
+			tableowner,tablespace,
+			rownum,relationsize,
+			indexnum,indexsize,
+			tablesize,
+			seq_scan,seq_tup_read,
+			idx_scan,idx_tup_fetch,
+			last_vacuum,last_autovacuum,
+			last_analyze,last_autoanalyze
+	    )
+		VALUES
+		(
+			$1,
+			$2,$3,
+			$4,$5,
+			$6,$7,
+			NULL,$8,
+			$9,$10,
+			$11,
+			$12,$13,
+			$14,$15,
+			NULLIF($16,'')::TIMESTAMP,NULLIF($17,'')::TIMESTAMP,
+			NULLIF($18,'')::TIMESTAMP,NULLIF($19,'')::TIMESTAMP
+		) 
+	    `
+		_, err = conn.Exec(sql,
+			inspection_report_id,
+			row.Pg_database, rec.Schemaname,
+			rec.Tablename, rec.Tablecomment,
+			rec.Tableowner, rec.Tablespace,
+			rec.Relationsize,
+			rec.Indexnum, rec.Indexsize,
+			rec.Tablesize,
+			rec.Seq_scan, rec.Seq_tup_read,
+			rec.Idx_scan, rec.Idx_tup_fetch,
+			rec.Last_vacuum, rec.Last_autovacuum,
+			rec.Last_analyze, rec.Last_autoanalyze)
+
+		if err != nil {
+			out.Stderr = error_msg + "插入数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+		go inspection_report_table_rownum_update(inspection_report_id, row, rec)
+	}
+
+	out.Stdout = ""
+	out.Stderr = ""
+	s <- out
+	return
+}
+
+//用于异步更新每个表的记录数
+func inspection_report_table_rownum_update(inspection_report_id int, row Row, rec Inspection_report_table) {
+	var err error
+	remote_ip := "127.0.0.1"
+	modlename := "inspection_report_table_rownum_update"
+	username := "admin"
+	dbmsg := row.Host + ":" + fmt.Sprintf("%d", row.Pg_port) + "@" + row.Pg_database + "." + rec.Schemaname + "." + rec.Tablename
+
+	//连接要统计的节点
+	var nodeconn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = row.Host
+	config.User = row.Pg_user
+	config.Password = row.Pg_password
+	config.Database = row.Pg_database
+	config.Port = row.Pg_port
+
+	nodeconn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg := "巡检报告－－更新每个表的记录数－－连接统计数据库[" + dbmsg + "]出错,详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer nodeconn.Close()
+
+	var sql string
+	var num int64
+	sql = "SELECT COUNT(1) AS num FROM " + rec.Schemaname + "." + rec.Tablename
+	rows, err := nodeconn.Query(sql)
+
+	for rows.Next() {
+		err = rows.Scan(&num)
+		if err != nil {
+			error_msg := "巡检报告－－更新每个表[" + dbmsg + "]的记录数－－提取数据出错,详情：" + err.Error()
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+	}
+	defer rows.Close()
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg := "巡检报告－－更新每个表的记录数－－连接pgcluster数据库出错,详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql = "UPDATE inspection_report_table SET rownum=$1 WHERE inspection_report_id=$2 AND schemaname=$3 AND tablename=$4"
+	_, err = conn.Exec(sql, num, inspection_report_id, rec.Schemaname, rec.Tablename)
+
+	if err != nil {
+		error_msg := "巡检报告－－更新每个表的记录数－－更新数据表[" + dbmsg + "]出错,详情：" + err.Error()
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+}
+
+/*
+功能描述：巡检报告－－数据表列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_table_listHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_table_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "获取巡检报告－－获取数据表统计信息ID号为[" + r.FormValue("inspection_report_id") + "]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取数据
+	data_chan := make(chan Inspection_report_tableData)
+	go inspection_report_table_record(inspection_report_id, sql_sort_limit(r), data_chan)
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM inspection_report_table WHERE inspection_report_id=" + fmt.Sprintf("%d", inspection_report_id)
+	total_chan := make(chan Totalnum)
+	go gettotalnum(sql, total_chan)
+
+	//返回异步获取数据结果
+	data := <-data_chan
+	if data.Err != "" {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + total.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：获取巡检报告－－数据表统计信息
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+sql_sort_limit         -- 需要分页sql语句
+
+返回值说明：
+data_chan -- chan Inspection_report_tableData
+*/
+
+func inspection_report_table_record(inspection_report_id int, sql_sort_limit string, data_chan chan Inspection_report_tableData) {
+	var err error
+	var sql string
+	var rec Inspection_report_table
+	var data Inspection_report_tableData = Inspection_report_tableData{}
+	data.Rows = make([]Inspection_report_table, 0)
+	data.Total = 0
+	data.Err = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		data.Err = "连接数据库失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,
+		datname,schemaname,
+		tablename,tablecomment,
+		tableowner,tablespace,
+		COALESCE(rownum,0) AS rownum_show,pg_catalog.pg_size_pretty(relationsize) AS show_relationsize,
+		indexnum,pg_catalog.pg_size_pretty(indexsize) AS show_indexsize,
+		pg_catalog.pg_size_pretty(tablesize) AS show_tablesize,
+		seq_scan,seq_tup_read,
+		idx_scan,idx_tup_fetch,
+		COALESCE(last_vacuum::TEXT,'') AS last_vacuum,COALESCE(last_autovacuum::TEXT,'') AS last_autovacuum,
+		COALESCE(last_analyze::TEXT,'') AS last_analyze,COALESCE(last_autoanalyze::TEXT,'') AS last_autoanalyze
+	FROM 
+		inspection_report_table
+	WHERE
+		inspection_report_id=$1
+    ` + sql_sort_limit
+
+	rows, err := conn.Query(sql, inspection_report_id)
+	if err != nil {
+		data.Err = "查询资料失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Id,
+			&rec.Datname, &rec.Schemaname,
+			&rec.Tablename, &rec.Tablecomment,
+			&rec.Tableowner, &rec.Tablespace,
+			&rec.Rownum, &rec.Relationsize,
+			&rec.Indexnum, &rec.Indexsize,
+			&rec.Tablesize,
+			&rec.Seq_scan, &rec.Seq_tup_read,
+			&rec.Idx_scan, &rec.Idx_tup_fetch,
+			&rec.Last_vacuum, &rec.Last_autovacuum,
+			&rec.Last_analyze, &rec.Last_autoanalyze)
+		if err != nil {
+			data.Err = "提取数据失败－－详情：" + err.Error()
+			data_chan <- data
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	data_chan <- data
+	return
+}
+
+/*
+功能描述：巡检报告－－索引统计
+
+参数说明：
+inspection_report_id  -- 巡检报表－系统编号
+row －－ 节点资料
+dattablespace --数据库默认表空间
+
+返回值说明：
+s -- 通道返回一个Stdout_and_stderr结构体
+*/
+
+//定义数据表记录struct
+
+type Inspection_report_index struct {
+	Id           int    `json:"id"`
+	Datname      string `json:"datname"`
+	Schemaname   string `json:"schemaname"`
+	Tablename    string `json:"tablename"`
+	Indexname    string `json:"indexname"`
+	Indexcomment string `json:"indexcomment"`
+	Indexowner   string `json:"indexowner"`
+	Uniqueindex  string `json:"uniqueindex"`
+	Indexsize    string `json:"indexsize"`
+	Tablespace   string `json:"tablespace"`
+	Idx_scan     int64  `json:"idx_scan"`
+	Indexdef     string `json:"indexdef"`
+}
+
+//定义列表返回的struct
+type Inspection_report_indexData struct {
+	Total int                       `json:"total"`
+	Rows  []Inspection_report_index `json:"rows"`
+	Err   string                    `json:"err"`
+}
+
+func inspection_report_index_make(inspection_report_id int, row Row, s chan Stdout_and_stderr) {
+	var err error
+	var error_msg string
+
+	//定义返回的struct
+	var out Stdout_and_stderr
+	out.Stdout = ""
+	out.Stderr = ""
+
+	var rec Inspection_report_index
+	var sql string
+
+	error_msg = "索引统计－－统计库为[" + row.Pg_database + "]－－"
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Stderr = error_msg + "连接pgcluster数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//连接要统计的节点
+	var nodeconn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = row.Host
+	config.User = row.Pg_user
+	config.Password = row.Pg_password
+	config.Database = row.Pg_database
+	config.Port = row.Pg_port
+
+	nodeconn, err = pgx.Connect(config)
+	if err != nil {
+		out.Stderr = error_msg + "连接统计库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer nodeconn.Close()
+
+	//获取数据库默认表空间
+	sql = `
+	SELECT
+		pg_tablespace.spcname AS dattablespace
+	FROM
+		pg_catalog.pg_database AS pg_database 
+		INNER JOIN pg_catalog.pg_tablespace AS pg_tablespace ON pg_tablespace.oid=pg_database.dattablespace
+	WHERE
+		pg_database.datname=$1
+	`
+	rows, err := nodeconn.Query(sql, row.Pg_database)
+	if err != nil {
+		out.Stderr = error_msg + "查询数据库默认表空间失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	var dattablespace string
+	if rows.Next() {
+		err = rows.Scan(&dattablespace)
+		if err != nil {
+			out.Stderr = error_msg + "获取数据库默认表空间数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+	}
+	rows.Close()
+
+	sql = `
+	SELECT
+		pg_namespace.nspname AS schemaname ,tablename.relname AS tablename,
+		pg_class.relname AS indexname,COALESCE(pg_description.description,'') AS inexcomment,
+		pg_authid.rolname AS indexowner,CASE WHEN pg_index.indisunique THEN '是' ELSE '否' END AS indisunique,
+		pg_catalog.pg_table_size(pg_class.oid)::text AS indexsize,COALESCE(pg_tablespace.spcname,'` + dattablespace + `') AS tablespace,
+		COALESCE(pg_stat_all_indexes.idx_scan,0) AS idx_scan,pg_catalog.pg_get_indexdef(pg_class.oid) AS indexdef
+	FROM
+		pg_catalog.pg_class AS pg_class
+		INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid=pg_class.relnamespace
+		INNER JOIN pg_catalog.pg_index AS pg_index ON pg_index.indexrelid=pg_class.oid
+		INNER JOIN pg_catalog.pg_class AS tablename ON tablename.oid=pg_index.indrelid
+		LEFT OUTER JOIN pg_catalog.pg_description AS pg_description ON pg_description.objoid=pg_class.oid AND pg_description.objsubid=0
+		LEFT OUTER JOIN (
+		    SELECT 
+			    pg_class.oid 
+			FROM 
+			    pg_catalog.pg_class AS pg_class
+				INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_class.relnamespace=pg_namespace.oid  
+			WHERE
+				pg_class.relname='pg_class' 
+				AND pg_namespace.nspname='pg_catalog' 
+		) AS classoid ON classoid.oid=pg_description.classoid
+		INNER JOIN pg_catalog.pg_authid AS pg_authid ON pg_authid.oid=pg_class.relowner
+		LEFT OUTER JOIN pg_catalog.pg_tablespace AS pg_tablespace ON pg_tablespace.oid=pg_class.reltablespace
+		LEFT OUTER JOIN pg_catalog.pg_stat_all_indexes AS pg_stat_all_indexes ON pg_stat_all_indexes.indexrelid=pg_class.oid
+	WHERE
+		pg_class.relkind='i'
+		AND pg_namespace.nspname != 'pg_toast'
+	`
+
+	rows, err = nodeconn.Query(sql)
+	if err != nil {
+		out.Stderr = error_msg + "查询数据失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Schemaname, &rec.Tablename,
+			&rec.Indexname, &rec.Indexcomment,
+			&rec.Indexowner, &rec.Uniqueindex,
+			&rec.Indexsize, &rec.Tablespace,
+			&rec.Idx_scan, &rec.Indexdef)
+		if err != nil {
+			out.Stderr = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+
+		sql = `
+	    INSERT INTO inspection_report_index
+	    (
+	        inspection_report_id,datname,
+			schemaname,tablename,
+			indexname,indexcomment,
+			indexowner,uniqueindex,
+			indexsize,tablespace,
+			idx_scan,indexdef
+	    )
+		VALUES
+		(
+			$1,$2,
+			$3,$4,
+			$5,$6,
+			$7,$8,
+			$9,$10,
+			$11,$12
+		) 
+	    `
+		_, err = conn.Exec(sql,
+			inspection_report_id, row.Pg_database,
+			rec.Schemaname, rec.Tablename,
+			rec.Indexname, rec.Indexcomment,
+			rec.Indexowner, rec.Uniqueindex,
+			rec.Indexsize, rec.Tablespace,
+			rec.Idx_scan, rec.Indexdef)
+
+		if err != nil {
+			out.Stderr = error_msg + "插入数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+
+	}
+
+	out.Stdout = ""
+	out.Stderr = ""
+	s <- out
+	return
+}
+
+/*
+功能描述：巡检报告－－索引列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_index_listHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_index_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "获取巡检报告－－获取索引统计信息ID号为[" + r.FormValue("inspection_report_id") + "]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取数据
+	data_chan := make(chan Inspection_report_indexData)
+	go inspection_report_index_record(inspection_report_id, sql_sort_limit(r), data_chan)
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM inspection_report_index WHERE inspection_report_id=" + fmt.Sprintf("%d", inspection_report_id)
+	total_chan := make(chan Totalnum)
+	go gettotalnum(sql, total_chan)
+
+	//返回异步获取数据结果
+	data := <-data_chan
+	if data.Err != "" {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + total.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：获取巡检报告－－索引统计信息
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+sql_sort_limit         -- 需要分页sql语句
+
+返回值说明：
+data_chan -- chan Inspection_report_indexData
+*/
+
+func inspection_report_index_record(inspection_report_id int, sql_sort_limit string, data_chan chan Inspection_report_indexData) {
+	var err error
+	var sql string
+	var rec Inspection_report_index
+	var data Inspection_report_indexData = Inspection_report_indexData{}
+	data.Rows = make([]Inspection_report_index, 0)
+	data.Total = 0
+	data.Err = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		data.Err = "连接数据库失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,
+		datname,schemaname,
+		tablename,indexname,
+		indexcomment,indexowner,
+		uniqueindex,pg_catalog.pg_size_pretty(indexsize) AS show_indexsize,
+		tablespace,idx_scan,
+		indexdef
+	FROM 
+		inspection_report_index
+	WHERE
+		inspection_report_id=$1
+    ` + sql_sort_limit
+
+	rows, err := conn.Query(sql, inspection_report_id)
+	if err != nil {
+		data.Err = "查询资料失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Id,
+			&rec.Datname, &rec.Schemaname,
+			&rec.Tablename, &rec.Indexname,
+			&rec.Indexcomment, &rec.Indexowner,
+			&rec.Uniqueindex, &rec.Indexsize,
+			&rec.Tablespace, &rec.Idx_scan,
+			&rec.Indexdef)
+		if err != nil {
+			data.Err = "提取数据失败－－详情：" + err.Error()
+			data_chan <- data
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	data_chan <- data
+	return
+}
+
+/*
+功能描述：修改巡检报告名称
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_updateHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_updateHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "修改巡检报告名称－－ID号为 [ " + r.FormValue("inspection_report_id") + " ]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告ID号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	if r.FormValue("report_name") == "" {
+		error_msg = error_msg + "巡检报告名称不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		error_msg = error_msg + "连接db失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql = "UPDATE inspection_report SET report_name=$1 WHERE id=$2"
+	_, err = conn.Exec(sql, r.FormValue("report_name"), inspection_report_id)
+	if err != nil {
+		error_msg = error_msg + "更新数据出错，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	OutputJson(w, "SUCCESS", "修改资料保存成功", 0)
+	go write_log(remote_ip, modlename, username, "Log", error_msg+"修改资料成功")
+	return
+
+}
+
+/*
+功能描述：删除巡检报告
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_deleteHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_deleteHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "删除巡检报告－－ID号为 [ " + r.FormValue("inspection_report_id") + " ]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告ID号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	end := make(chan Stdout_and_stderr)
+	go inspection_report_delete(inspection_report_id, end)
+	t := <-end
+	if t.Stderr != "" {
+		error_msg = error_msg + t.Stderr
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	OutputJson(w, "SUCCESS", "删除记录成功", 0)
+	go write_log(remote_ip, modlename, username, "Log", error_msg+"删除记录成功")
+	return
+
+}
+
+func inspection_report_delete(inspection_report_id int, s chan Stdout_and_stderr) {
+	var err error
+	var sql string
+	//定义返回的struct
+	var out Stdout_and_stderr
+	out.Stdout = ""
+	out.Stderr = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Stderr = "连接数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+	DELETE FROM inspection_report WHERE id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	DELETE FROM inspection_report_state WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	DELETE FROM inspection_report_tablespace WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	DELETE FROM inspection_report_role WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	DELETE FROM inspection_report_database WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	DELETE FROM inspection_report_table WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	DELETE FROM inspection_report_index WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	`
+	_, err = conn.Exec(sql)
+	if err != nil {
+		out.Stderr = "删除记录失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+
+	out.Stdout = "删除记录成功"
+	s <- out
+	return
+}
+
+/*
+功能描述：巡检报告导出接口
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_exportHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var title []string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_exportHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "巡检报告导出－－ID号为 [ " + r.FormValue("inspection_report_id") + " ]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告ID号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取状态统计数据
+	state_chan := make(chan Inspection_report_stateData)
+	go inspection_report_state_record(inspection_report_id, "", state_chan)
+
+	//异步获取表空间统计数据
+	tablespace_chan := make(chan Inspection_report_tablespaceData)
+	go inspection_report_tablespace_record(inspection_report_id, "", tablespace_chan)
+
+	//异步获取角色统计数据
+	role_chan := make(chan Inspection_report_roleData)
+	go inspection_report_role_record(inspection_report_id, "", role_chan)
+
+	//异步获取角色统计数据
+	database_chan := make(chan Inspection_report_databaseData)
+	go inspection_report_database_record(inspection_report_id, "", database_chan)
+
+	//异步获取数据表统计数据
+	table_chan := make(chan Inspection_report_tableData)
+	go inspection_report_table_record(inspection_report_id, "", table_chan)
+
+	//异步获取索引统计数据
+	index_chan := make(chan Inspection_report_indexData)
+	go inspection_report_index_record(inspection_report_id, "", index_chan)
+
+	//开始写入excel文件
+	var file *xlsx.File
+	var sheet *xlsx.Sheet
+	var row *xlsx.Row
+	var cell *xlsx.Cell
+	//定义标题单元格式
+	titlestyle := xlsx.NewStyle()
+	fill := *xlsx.NewFill("solid", "0092D050", "00000000")
+	font := *xlsx.NewFont(12, "Verdana")
+	border := *xlsx.NewBorder("thin", "thin", "thin", "thin")
+	titlestyle.Fill = fill
+	titlestyle.Font = font
+	titlestyle.Border = border
+
+	//定义内容格式
+	contentstyle := xlsx.NewStyle()
+	fill = *xlsx.NewFill("solid", "00FFFFFF", "00000000")
+	font = *xlsx.NewFont(10, "Verdana")
+	border = *xlsx.NewBorder("thin", "thin", "thin", "thin")
+	contentstyle.Fill = fill
+	contentstyle.Font = font
+	contentstyle.Border = border
+
+	file = xlsx.NewFile()
+	//写入状态统计值
+	sheet, err = file.AddSheet("状态统计")
+	if err != nil {
+		error_msg = error_msg + "增加“状态统计”Sheet出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	//写入标题
+	title = []string{"ID号", "项目", "值"}
+	row = sheet.AddRow()
+	for _, v := range title {
+		cell = row.AddCell()
+		cell.Value = v
+		cell.SetStyle(titlestyle)
+	}
+
+	//获取状态统计数据
+	data_state := <-state_chan
+	if data_state.Err != "" {
+		error_msg = data_state.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	for _, v := range data_state.Rows {
+		rec := reflect.ValueOf(v)
+		row = sheet.AddRow()
+		for k, _ := range title {
+			cell = row.AddCell()
+			cell.SetValue(rec.Field(k).Interface())
+			cell.SetStyle(contentstyle)
+		}
+	}
+
+	//写入表空间统计值
+	sheet, err = file.AddSheet("表空间")
+	if err != nil {
+		error_msg = error_msg + "增加“表空间”Sheet出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	//写入标题
+	title = []string{"ID号", "表空间名称", "注释", "所有者", "路径", "占用空间", "数据表数", "索引数"}
+	row = sheet.AddRow()
+	for _, v := range title {
+		cell = row.AddCell()
+		cell.Value = v
+		cell.SetStyle(titlestyle)
+	}
+
+	//获取表空间统计数据
+	data_tablespace := <-tablespace_chan
+	if data_tablespace.Err != "" {
+		error_msg = error_msg + data_tablespace.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	for _, v := range data_tablespace.Rows {
+		rec := reflect.ValueOf(v)
+		row = sheet.AddRow()
+		for k, _ := range title {
+			cell = row.AddCell()
+			cell.SetValue(rec.Field(k).Interface())
+			cell.SetStyle(contentstyle)
+		}
+	}
+
+	//写入角色统计值
+	sheet, err = file.AddSheet("角色")
+	if err != nil {
+		error_msg = error_msg + "增加“角色”Sheet出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//写入标题
+	title = []string{"ID号", "用户名", "注释", "超级用户", "准许创建用户", "准许创建数据库", "准许登录", "复制角色", "并发连接数", "口令状态", "口令过期时间", "数据库数", "数据表数", "索引数"}
+	row = sheet.AddRow()
+	for _, v := range title {
+		cell = row.AddCell()
+		cell.Value = v
+		cell.SetStyle(titlestyle)
+	}
+
+	//获取角色统计数据
+	data_role := <-role_chan
+	if data_role.Err != "" {
+		error_msg = error_msg + data_role.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	for _, v := range data_role.Rows {
+		rec := reflect.ValueOf(v)
+		row = sheet.AddRow()
+		for k, _ := range title {
+			cell = row.AddCell()
+			cell.SetValue(rec.Field(k).Interface())
+			cell.SetStyle(contentstyle)
+		}
+	}
+
+	//写入数据库统计值
+	sheet, err = file.AddSheet("数据库")
+	if err != nil {
+		error_msg = error_msg + "增加“数据库”Sheet出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//写入标题
+	title = []string{"ID号", "数据库名称", "注释", "所有者", "默认编码", "排序规则", "分组规则", "模板数据库", "准许连接", "最大连接数", "默认表空间", "占用空间", "数据表数", "索引数"}
+	row = sheet.AddRow()
+	for _, v := range title {
+		cell = row.AddCell()
+		cell.Value = v
+		cell.SetStyle(titlestyle)
+	}
+
+	//获取数据库统计数据
+	data_database := <-database_chan
+	if data_database.Err != "" {
+		error_msg = error_msg + data_database.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	for _, v := range data_database.Rows {
+		rec := reflect.ValueOf(v)
+		row = sheet.AddRow()
+		for k, _ := range title {
+			cell = row.AddCell()
+			cell.SetValue(rec.Field(k).Interface())
+			cell.SetStyle(contentstyle)
+		}
+	}
+
+	//写入数据表统计值
+	sheet, err = file.AddSheet("数据表")
+	if err != nil {
+		error_msg = error_msg + "增加“数据表”Sheet出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	//写入标题
+	title = []string{"ID号", "数据库名称", "所属模式", "表名", "注释", "所有者", "存储表空间", "记录数", "表文件占用空间", "索引数", "索引文件占用空间", "表相关文件占用空间", "顺序扫描次数", "顺序扫描取得行数", "索引扫描次数", "索引扫描取得行数", "手动清理时间", "自动清理时间", "手动分析时间", "自动分析时间"}
+	row = sheet.AddRow()
+	for _, v := range title {
+		cell = row.AddCell()
+		cell.Value = v
+		cell.SetStyle(titlestyle)
+	}
+
+	//获取数据表统计数据
+	data_table := <-table_chan
+	if data_table.Err != "" {
+		error_msg = error_msg + data_table.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	for _, v := range data_table.Rows {
+		rec := reflect.ValueOf(v)
+		row = sheet.AddRow()
+		for k, _ := range title {
+			cell = row.AddCell()
+			cell.SetValue(rec.Field(k).Interface())
+			cell.SetStyle(contentstyle)
+		}
+	}
+
+	//写入索引统计值
+	sheet, err = file.AddSheet("索引")
+	if err != nil {
+		error_msg = error_msg + "增加“索引”Sheet出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//写入标题
+	title = []string{"ID号", "数据库名", "所属模式", "表名", "索引名", "注释", "所有者", "唯一索引", "占用空间", "存储表空间", "索引扫描次数", "索引定义"}
+	row = sheet.AddRow()
+	for _, v := range title {
+		cell = row.AddCell()
+		cell.Value = v
+		cell.SetStyle(titlestyle)
+	}
+
+	//获取索引统计数据
+	data_index := <-index_chan
+	if data_index.Err != "" {
+		error_msg = error_msg + data_index.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	for _, v := range data_index.Rows {
+		rec := reflect.ValueOf(v)
+		row = sheet.AddRow()
+		for k, _ := range title {
+			cell = row.AddCell()
+			cell.SetValue(rec.Field(k).Interface())
+			cell.SetStyle(contentstyle)
+		}
+	}
+
+	//保存文件
+	filename := "inspection_report_" + username + ".xlsx"
+	err = file.Save("./easyui/inspection_report/" + filename)
+	if err != nil {
+		error_msg = error_msg + "保存Excel出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//操作服务(启动，重启和关闭)结果信息json结构
+	type Result_report_export struct {
+		Return_code       string `json:"return_code"`
+		Return_msg        string `json:"return_msg"`
+		Show_login_dialog int    `json:"show_login_dialog"`
+		Url               string `json:"url"`
+		Filename          string `json:"filename"`
+	}
+
+	error_msg = "生成巡检报告成功"
+	out := &Result_report_export{"SUCCESS", error_msg, 0, "/inspection_report/" + filename, filename}
+	b, _ := json.Marshal(out)
+	w.Write(b)
+	go write_log(remote_ip, modlename, username, "Log", error_msg)
+	return
+
+	//download_file(w, r, filename)
+
+}
+
+/*
+功能描述：下载文件
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+filename --要下载文件的名称
+
+返回值说明：无
+*/
+
+func download_file(w http.ResponseWriter, r *http.Request, filename string) {
+	path := "./easyui/inspection_report/" + filename
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	w.Header().Set("Cache-Control", "must-revalidate, post-check=0, pre-check=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	http.ServeFile(w, r, path)
+}
+
+/*
+功能描述：获取某个查询得到的记录数
+
+参数说明：
+sql -- 要执行的sql语句
+s   -- chan Totalnum
+
+返回值说明：
+Totalnum结构
+*/
+
+type Totalnum struct {
+	Total int    `json:"total"`
+	Err   string `json:"err"`
+}
+
+func gettotalnum(sql string, s chan Totalnum) {
+	//定义返回的struct
+	var err error
+	var error_msg string
+	var out Totalnum
+	out.Total = 0
+	out.Err = ""
+	error_msg = "获取某个查询得到的记录数－－"
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Err = error_msg + "连接db失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//统计总记录数
+	rows, err := conn.Query(sql)
+	if err != nil {
+		out.Err = error_msg + "执行查询失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+	if rows.Next() {
+		err = rows.Scan(&out.Total)
+		if err != nil {
+			out.Err = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+	}
+	s <- out
+	return
+}
+
+/*
 功能描述：获取某个节点ip绑定情况
 
 参数说明：
@@ -2822,7 +5848,7 @@ s -- 通道返回一个Row结构体, Return_code = FAIL表示获取数据失败,
 */
 
 func get_node_row(nodeid int, s chan Row) {
-	//连接db
+	//连接数据库
 	var row Row
 	row.Return_code = "SUCCESS"
 	row.Return_msg = ""
@@ -2927,6 +5953,63 @@ func vacuumdb(nodeid int, remote_ip string, username string) (errmsg string) {
 	error_msg = "执行vacuumdb成功[ " + fmt.Sprintf("%d", nodeid) + " ]"
 	go write_log(remote_ip, modlename, username, "Log", error_msg)
 	return ""
+}
+
+/*
+功能描述：拼接查询列表之排序，分页查询字符串
+
+参数说明：
+r -- http.Request指针
+
+返回值说明：
+返回拼接好的查询字符串
+*/
+
+func sql_sort_limit(r *http.Request) string {
+	var order_fields string
+	var order_type string
+
+	order_fields = r.FormValue("sort")
+	order_type = r.FormValue("order")
+
+	if order_fields == "" {
+		order_fields = "1"
+	}
+	if (order_type != "" && order_type != "asc" && order_type != "desc") || order_type == "" {
+		order_type = "asc"
+	}
+
+	//判断每页记录数参数的合法性
+	limit, err := strconv.Atoi(r.FormValue("rows"))
+	if err != nil || limit < 1 {
+		limit = 100
+	}
+
+	//判断page合法性
+	offset, err := strconv.Atoi(r.FormValue("page"))
+	if err != nil || offset < 1 {
+		offset = 0
+	} else {
+		offset = (offset - 1) * limit
+	}
+
+	return " ORDER BY " + sql_data_encode(order_fields) + " " + sql_data_encode(order_type) + " OFFSET " + fmt.Sprintf("%d", offset) + " LIMIT " + fmt.Sprintf("%d", limit)
+
+}
+
+/*
+功能描述：sql查询拼接字符串编码
+
+参数说明：
+str -- 要编码的字符串
+
+返回值说明：
+返回编码过的字符串
+
+*/
+
+func sql_data_encode(str string) string {
+	return strings.Replace(str, "'", "''", -1)
 }
 
 /*
@@ -3138,7 +6221,7 @@ func write_log(remote_ip string, modlename string, username string, log_level st
 	fmt.Println("操作用户：", username)
 	fmt.Println("日志级别：", log_level)
 	fmt.Println("详细信息：", error_msg)
-	//连接db，保存日志
+	//连接数据库，保存日志
 	var conn *pgx.Conn
 	conn, err := pgx.Connect(extractConfig())
 	if err != nil {

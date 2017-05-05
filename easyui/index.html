@@ -45,19 +45,19 @@
    <tr> 
      <th data-options="field:'host',width:'130px'">主机名或IP</th> 
      <th data-options="field:'ssh_port',width:'80px'">SSH端口号</th>
-	 <th data-options="field:'ssh_authmethod',width:'80px'">SSH认证方式</th>        
+     <th data-options="field:'ssh_authmethod',width:'80px'">SSH认证方式</th>        
      <th data-options="field:'ssh_user',width:'100px'">SSH用户名</th> 
      <th data-options="field:'pg_bin',width:'200px'">PG服务端程序路径</th>
      <th data-options="field:'pg_data',width:'200px'">PGDATA所在路径</th>
-	 <th data-options="field:'pg_log',width:'200px'">访问日志保存路径</th>
+     <th data-options="field:'pg_log',width:'200px'">访问日志保存路径</th>
      <th data-options="field:'pg_port',width:'80px'">PG服务端口号</th> 
      <th data-options="field:'pg_database',width:'100px'">连接数据库名称</th> 
      <th data-options="field:'pg_user',width:'100px'">数据库用户名称</th> 
      <th data-options="field:'master_vip',width:'100px'">做为主节点时绑定VIP</th>
      <th data-options="field:'master_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
      <th data-options="field:'slave_vip',width:'100px'">做为备节点时绑定VIP</th>
-     <th data-options="field:'slave_vip_networkcard',width:'100px'">绑定VIP使用设备号</th> 
-	 <th data-options="field:'bind_vip_authmethod',width:'80px'">绑定网卡SSH认证方法</th>    
+     <th data-options="field:'slave_vip_networkcard',width:'100px'">绑定VIP使用设备号</th>
+     <th data-options="field:'bind_vip_authmethod',width:'80px'">绑定网卡SSH认证方法</th>    
      <th data-options="field:'bind_vip_user',width:'100px'">绑定网卡操作用户</th>
      <th data-options="field:'remark',width:'200px'">备注</th>  
    </tr>
@@ -73,6 +73,7 @@
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-vip',plain:true" id="cy_vipadmin_click">VIP绑定</a> 
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-wakeup',plain:true" id="cy_slave_wakeup_click">备机唤醒</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-promote',plain:true" id="cy_promote_click">主备切换</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-report',plain:true" id="cy_inspection_report_click">巡检报告</a>
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-password',plain:true" id="cy_password_click">修改登录密码</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-exit',plain:true" id="cy_exit_click">退出</a>  
 </div>
@@ -159,13 +160,13 @@
  </div>
 </div>
 <div id="update_dialog_buttons">
-    <a href="javascript:void(0)" class="easyui-linkbutton c2" id="update_dialog_save" data-options="iconCls:'icon-save',width:80">保存</a>
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="update_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton c2" id="update_dialog_save" data-options="iconCls:'icon-save',width:80">保存</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="update_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
 </div>                    
 <!--修改资料窗口-->
 
 <!--参数设置窗口-->
-<div id="parameter_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#parameter_dialog_buttons',closed:true,height:688,closable:true"> <!--modal是遮罩层--> 
+<div id="parameter_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#parameter_dialog_buttons',closed:true,height:688,closable:true,iconCls:'icon-parameter'"> <!--modal是遮罩层--> 
  <div style="padding:10px 5px 5px 5px">   
    <form id="parameter_dialog_form" method="post"> 
      <table cellpadding="3" width="99%">
@@ -175,13 +176,13 @@
          <td align="center" width="120">节点名称</td>
          <td><input class="easyui-textbox textbox-default-width" name="node_name" data-options="readonly:true"/></td>
        </tr>
-	   <tr>
+       <tr>
          <td align="center" width="120">节点类别</td>
          <td><input class="easyui-textbox textbox-default-width" name="service_type" id="parameter_service_type" data-options="readonly:true"/></td>
          <td align="center" width="120">运行状态</td>
          <td><input class="easyui-textbox textbox-default-width" name="service_status" id="parameter_service_status" data-options="readonly:true"/></td>
        </tr>
-	   <tr>
+       <tr>
         <td align="center" width="120">版本号</td>
         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="pg_version" id="parameter_pg_version" data-options="readonly:true"/></td> 
       </tr> 
@@ -189,17 +190,17 @@
         <td align="center" width="120">配置文件</td>    
         <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="parameter_files" id="parameter_files" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label'" required="true"></select></td> 
       </tr>
-	  <tr>
+      <tr>
         <td align="center" width="120">历史备份</td>    
-        <td><select class="easyui-combogrid textbox-default-width" name="parameter_files_bak" id="parameter_files_bak" ></select></td> 
-		<td align="center" width="120">模板文件</td>
+        <td><select class="easyui-combogrid textbox-default-width" name="parameter_files_bak" id="parameter_files_bak" ></select></td>
+        <td align="center" width="120">模板文件</td>
         <td><select class="easyui-combogrid textbox-default-width" name="parameter_files_template" id="parameter_files_template" ></select></td>
       </tr>
       <tr>
         <td align="center" width="120">文件内容</td>
         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="parameter_file_contents" id="parameter_file_contents" data-options="readonly:false,multiline:true,height:290,required:true"></input></td> 
       </tr>
-	  <tr>
+      <tr>
         <td align="center" width="120">备注</td>
         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="remark" id="parameter_remark" data-options="readonly:false,required:true"/></td>
       </tr>  
@@ -212,16 +213,16 @@
  </div> 
 </div>
 <div id="parameter_dialog_buttons">  
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_save" data-options="iconCls:'icon-save',width:80">保存</a> 
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_reload" data-options="iconCls:'icon-reload',width:110">保存&reload</a>      
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_restart" data-options="iconCls:'icon-restart',width:110">保存&restart</a> 
-	<a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_saveas_template" data-options="iconCls:'icon-template',width:110">保存为模板</a>      
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_save" data-options="iconCls:'icon-save',width:80">保存</a> 
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_reload" data-options="iconCls:'icon-reload',width:110">保存&reload</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_restart" data-options="iconCls:'icon-restart',width:110">保存&restart</a> 
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_saveas_template" data-options="iconCls:'icon-template',width:110">保存为模板</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="parameter_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>   
 <!--参数设置窗口-->
 
 <!--服务管理窗口-->
-<div id="serviceadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#serviceadmin_dialog_buttons',closed:true,height:618,closable:true"> <!--modal是遮罩层--> 
+<div id="serviceadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#serviceadmin_dialog_buttons',closed:true,height:618,closable:true,iconCls:'icon-service'"> <!--modal是遮罩层--> 
  <div style="padding:30px 5px 5px 10px">      
    <form id="serviceadmin_dialog_form" method="post"> 
        <table cellpadding="3" width="99%">
@@ -246,8 +247,8 @@
             <td><input class="easyui-textbox textbox-default-width" name="host" data-options="readonly:true" /></td>
             <td align="center" width="120">SSH端口号</td>
             <td><input class="easyui-numberbox textbox-default-width" name="ssh_port" data-options="readonly:true"/></td>
-          </tr> 
-		  <tr>
+          </tr>
+          <tr>
             <td align="center" width="120">SSH认证方式</td>
             <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="ssh_authmethod" data-options="readonly:true,editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
           </tr> 
@@ -286,17 +287,17 @@
  </div>
 </div>
 <div id="serviceadmin_dialog_buttons">
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_start" data-options="iconCls:'icon-start',width:80">start</a>
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_stop" data-options="iconCls:'icon-stop',width:80">stop</a>
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_restart" data-options="iconCls:'icon-restart',width:80">restart</a>   
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_reload" data-options="iconCls:'icon-reload',width:80">reload</a>   
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_status" data-options="iconCls:'icon-status',width:80">status</a>   
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_start" data-options="iconCls:'icon-start',width:80">start</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_stop" data-options="iconCls:'icon-stop',width:80">stop</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_restart" data-options="iconCls:'icon-restart',width:80">restart</a>   
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_reload" data-options="iconCls:'icon-reload',width:80">reload</a>   
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_status" data-options="iconCls:'icon-status',width:80">status</a>   
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="serviceadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>                    
 <!--服务管理窗口-->     
 
 <!--vip管理窗口-->
-<div id="vipadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#vipadmin_dialog_buttons',closed:true,height:658,closable:true"> <!--modal是遮罩层--> 
+<div id="vipadmin_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#vipadmin_dialog_buttons',closed:true,height:668,closable:true,iconCls:'icon-vip'"> <!--modal是遮罩层--> 
  <div style="padding:8px 5px 5px 8px">      
    <form id="vipadmin_dialog_form" method="post"> 
        <table cellpadding="3" width="99%">
@@ -335,8 +336,8 @@
             <td><input class="easyui-textbox textbox-default-width" name="vip" data-options="readonly:false,required:true,validType:['isip']"/></td>
             <td align="center">网卡设备号</td>
             <td><input class="easyui-textbox textbox-default-width" name="vip_networkcard" data-options="readonly:false,required:true,prompt:'如eth0:1'"/></td>
-          </tr>  
-		  <tr>
+          </tr>
+          <tr>
             <td align="center" width="120">绑定网卡登录认证方式</td>
             <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="bind_vip_authmethod" id="vipadmin_bind_vip_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
           </tr> 
@@ -363,15 +364,15 @@
  </div>
 </div>
 <div id="vipadmin_dialog_buttons">
- <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_bind" data-options="iconCls:'icon-vip',width:80">绑定VIP</a>   
- <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_unbind" data-options="iconCls:'icon-vip-unbind',width:80">解绑VIP</a>   
- <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>           
- <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_bind" data-options="iconCls:'icon-vip',width:80">绑定VIP</a>   
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_unbind" data-options="iconCls:'icon-vip-unbind',width:80">解绑VIP</a>   
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>           
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="vipadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>                    
 <!--vip管理窗口-->   
 
 <!--备机唤醒管理窗口-->
-<div id="slave_wakeup_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#slave_wakeup_dialog_buttons',closed:true,height:688,closable:true"> <!--modal是遮罩层--> 
+<div id="slave_wakeup_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#slave_wakeup_dialog_buttons',closed:true,height:688,closable:true,iconCls:'icon-wakeup'"> <!--modal是遮罩层--> 
  <div style="padding:8px 5px 5px 8px">      
    <form id="slave_wakeup_dialog_form" method="post"> 
        <table cellpadding="3" width="99%">
@@ -410,8 +411,8 @@
             <td><input class="easyui-textbox textbox-default-width" name="vip" id="salve_makeup_vip" data-options="readonly:false,required:false,validType:['isip']"/></td>
             <td align="center">绑定网卡设备号</td>
             <td><input class="easyui-textbox textbox-default-width" name="vip_networkcard" data-options="readonly:false,required:false,prompt:'如eth0:1'"/></td>
-          </tr>  
-		        <tr>
+          </tr>
+          <tr>
             <td align="center" width="120">绑定网卡登录认证方式</td>
             <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="bind_vip_authmethod" id="slave_wakeup_bind_vip_authmethod" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '密钥登陆（key）',value: 'key',selected:true},{label: '密码登陆（password）',value: 'password'}]" required="true"></select></td> 
           </tr> 
@@ -442,14 +443,14 @@
  </div>
 </div>
 <div id="slave_wakeup_dialog_buttons">
- <a href="javascript:void(0)" class="easyui-linkbutton c5" id="slave_wakeup_dialog_run" data-options="iconCls:'icon-run',width:80">执行</a>   
- <a href="javascript:void(0)" class="easyui-linkbutton" id="slave_wakeup_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>           
- <a href="javascript:void(0)" class="easyui-linkbutton" id="slave_wakeup_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="slave_wakeup_dialog_run" data-options="iconCls:'icon-run',width:80">执行</a>   
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="slave_wakeup_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>           
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="slave_wakeup_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>                    
 <!--备机唤醒管理窗口-->
 
 <!--主备切换窗口-->
-<div id="promote_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#promote_dialog_buttons',closed:true,height:688,closable:true"> <!--modal是遮罩层--> 
+<div id="promote_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#promote_dialog_buttons',closed:true,height:688,closable:true,iconCls:'icon-promote'"> <!--modal是遮罩层--> 
    <form id="promote_dialog_form" method="post"> 
      <div class="easyui-tabs" id="promote_tabs" fit="true" style="width:100%;height:600px"> 
        <div title="主节点（master）" style="padding:10px">
@@ -650,14 +651,159 @@
    </form>  
 </div>
 <div id="promote_dialog_buttons">
-    <a href="javascript:void(0)" class="easyui-linkbutton c5" id="promote_dialog_start" data-options="iconCls:'icon-promote',width:100">一键切换</a>  
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="promote_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>      
-    <a href="javascript:void(0)" class="easyui-linkbutton" id="promote_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
+  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="promote_dialog_start" data-options="iconCls:'icon-promote',width:100">一键切换</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="promote_dialog_ip_refresh" data-options="iconCls:'icon-refresh',width:120">刷新ip绑定详情</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="promote_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>    
 </div>                    
 <!--主务切换窗口-->
 
+<!--巡检报告管理窗口-->
+<div id="inspection_report_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#inspection_report_dialog_button',closed:true,width:1250,height:550,resizable:true,closable:true,maximizable:true,iconCls:'icon-report'"> <!--modal是遮罩层--> 
+ <div class="easyui-layout" fit="true"> 
+   <div region="west" split="true" style="width:400px;border-right:0px dotted #ccc;border-left:0px;border-top:0px;border-bottom:0px">
+     <table id="inspection_report_list" class="easyui-datagrid">   
+      <thead>
+        <tr>
+          <th field="id" checkbox="true"></th>
+          <th data-options="field:'report_name',sortable:true,width:'130px'">报告名称</th> 
+          <th data-options="field:'createtime',sortable:true,width:'100px'">生成时间</th>
+          <th data-options="field:'username',sortable:true,width:'80px'">操作员账号</th>        
+        </tr>
+      </thead>
+     </table> 
+   </div> 
+   <div region="center" border="false" >   
+     <div class="easyui-tabs" id="inspection_report_tabs" fit="true" style="width:100%;height:600px">
+       <div title="状态统计" style="padding:0px">
+         <table id="inspection_report_state_list" class="easyui-datagrid">   
+           <thead>
+             <tr>
+               <th data-options="field:'id',sortable:true,width:'80px'">ID号</th>			
+               <th data-options="field:'subject',sortable:true,width:'280px'">项目</th> 
+               <th data-options="field:'val',sortable:true,width:'680px'">值</th> 
+             </tr>
+           </thead>
+         </table>
+       </div>
+       <div title="表空间" style="padding:0px"> 
+         <table id="inspection_report_tablespace_list" class="easyui-datagrid">   
+           <thead>
+             <tr>
+               <th data-options="field:'spcname',sortable:true,width:'130px'">表空间名称</th> 
+               <th data-options="field:'spccomment',sortable:true,width:'130px'">注释</th> 
+               <th data-options="field:'spcowner',sortable:true,width:'100px'">所有者</th>
+               <th data-options="field:'location',sortable:true,width:'280px'">路径</th>        
+               <th data-options="field:'spcsize',sortable:true,width:'80px'">占用空间</th>        
+               <th data-options="field:'tablenum',sortable:true,width:'80px',align:'right'">数据表数</th>        
+               <th data-options="field:'indexnum',sortable:true,width:'80px',align:'right'">索引数</th>        									
+             </tr>
+           </thead>
+         </table>
+       </div>
+       <div title="角色" style="padding:0px"> 
+         <table id="inspection_report_role_list" class="easyui-datagrid">   
+           <thead>
+             <tr>
+               <th data-options="field:'rolname',sortable:true,width:'130px'">用户名</th>
+               <th data-options="field:'rolcomment',sortable:true,width:'130px',align:'center'">注释</th>			
+               <th data-options="field:'rolsuper',sortable:true,width:'70px',align:'center'">超级用户</th>
+               <th data-options="field:'rolcreaterole',sortable:true,width:'85px',align:'center'">准许创建用户</th>
+               <th data-options="field:'rolcreatedb',sortable:true,width:'95px',align:'center'">准许创建数据库</th>
+               <th data-options="field:'rolcanlogin',sortable:true,width:'70px',align:'center'">准许登录</th>
+               <th data-options="field:'rolreplication',sortable:true,width:'70px',align:'center'">复制角色</th>
+               <th data-options="field:'rolconnlimit',sortable:true,width:'80px',align:'right'">并发连接数</th>
+               <th data-options="field:'rolpassword_state',sortable:true,width:'70px'">口令状态</th>
+               <th data-options="field:'rolvaliduntil',sortable:true,width:'130px'">口令过期时间</th>
+               <th data-options="field:'datnum',sortable:true,width:'130px',align:'right'">数据库数</th>
+               <th data-options="field:'tablenum',sortable:true,width:'130px',align:'right'">数据表数</th>
+               <th data-options="field:'indexnum',sortable:true,width:'130px',align:'right'">索引数</th>									
+             </tr>
+           </thead>
+         </table> 
+       </div>
+       <div title="数据库" style="padding:0px"> 
+         <table id="inspection_report_database_list" class="easyui-datagrid">   
+           <thead>
+             <tr>
+               <th data-options="field:'datname',sortable:true,width:'130px'">数据库名</th> 
+               <th data-options="field:'datcomment',sortable:true,width:'130px'">注释</th> 
+               <th data-options="field:'datdba',sortable:true,width:'70px',align:'center'">所有者</th>
+               <th data-options="field:'encoding',sortable:true,width:'70px',align:'center'">默认编码</th>
+               <th data-options="field:'datcollate',sortable:true,width:'70px',align:'center'">排序规则</th>
+               <th data-options="field:'datctype',sortable:true,width:'70px',align:'center'">分组规则</th>
+               <th data-options="field:'datistemplate',sortable:true,width:'75px',align:'center'">模板数据库</th>
+               <th data-options="field:'datallowconn',sortable:true,width:'70px',align:'center'">准许连接</th>
+               <th data-options="field:'datconnlimit',sortable:true,width:'75px',align:'right'">最大连接数</th>
+               <th data-options="field:'dattablespace',sortable:true,width:'100px'">默认表空间</th>
+               <th data-options="field:'datsize',sortable:true,width:'100px'">占用空间</th>
+               <th data-options="field:'tablenum',sortable:true,width:'100px',align:'right'">数据表数</th>
+               <th data-options="field:'indexnum',sortable:true,width:'100px',align:'right'">索引数</th>									
+             </tr>
+           </thead>
+         </table> 
+       </div>
+       <div title="数据表" style="padding:0px"> 
+         <table id="inspection_report_table_list" class="easyui-datagrid">   
+           <thead>
+             <tr>
+               <th data-options="field:'datname',sortable:true,width:'130px'">数据库名</th> 
+               <th data-options="field:'schemaname',sortable:true,width:'130px'">所属模式</th> 
+               <th data-options="field:'tablename',sortable:true,width:'150px',align:'left'">表名</th>
+               <th data-options="field:'tablecomment',sortable:true,width:'150px',align:'left'">注释</th>
+               <th data-options="field:'tableowner',sortable:true,width:'70px',align:'left'">所有者</th>
+               <th data-options="field:'tablespace',sortable:true,width:'80px',align:'center'">存储表空间</th>
+               <th data-options="field:'rownum',sortable:true,width:'75px',align:'right'">记录数</th>
+               <th data-options="field:'relationsize',sortable:true,width:'100px',align:'left'">表文件占用空间</th>
+               <th data-options="field:'indexnum',sortable:true,width:'75px',align:'right'">索引数</th>
+               <th data-options="field:'indexsize',sortable:true,width:'120px',align:'left'">索引文件占用空间</th>
+               <th data-options="field:'tablesize',sortable:true,width:'120px',align:'left'">表相关文件占用空间</th>	
+               <th data-options="field:'seq_scan',sortable:true,width:'100px',align:'right'">顺序扫描次数</th>
+               <th data-options="field:'seq_tup_read',sortable:true,width:'130px',align:'right'">顺序扫描取得行数</th>
+               <th data-options="field:'idx_scan',sortable:true,width:'100px',align:'right'">索引扫描次数</th>
+               <th data-options="field:'idx_tup_fetch',sortable:true,width:'130px',align:'right'">索引扫描取得行数</th>
+               <th data-options="field:'last_vacuum',sortable:true,width:'130px'">手动清理时间</th>
+               <th data-options="field:'last_autovacuum',sortable:true,width:'130px'">自动清理时间</th>
+               <th data-options="field:'last_analyze',sortable:true,width:'130px'">手动分析时间</th>
+               <th data-options="field:'last_autoanalyze',sortable:true,width:'130px'">自动分析时间</th>
+             </tr>
+           </thead>
+         </table> 
+       </div>
+       <div title="索引" style="padding:0px"> 
+         <table id="inspection_report_index_list" class="easyui-datagrid">   
+           <thead>
+             <tr>
+               <th data-options="field:'datname',sortable:true,width:'130px'">数据库名</th> 
+               <th data-options="field:'schemaname',sortable:true,width:'130px'">所属模式</th> 
+               <th data-options="field:'tablename',sortable:true,width:'150px',align:'left'">表名</th>
+               <th data-options="field:'indexname',sortable:true,width:'350px',align:'left'">索引名</th>
+               <th data-options="field:'indexcomment',sortable:true,width:'150px',align:'left'">注释</th>
+               <th data-options="field:'indexowner',sortable:true,width:'80px',align:'left'">所有者</th>
+               <th data-options="field:'uniqueindex',sortable:true,width:'75px',align:'center'">唯一索引</th>
+               <th data-options="field:'indexsize',sortable:true,width:'100px',align:'left'">占用空间</th>
+               <th data-options="field:'tablespace',sortable:true,width:'90px',align:'left'">存储表空间</th>
+               <th data-options="field:'idx_scan',sortable:true,width:'120px',align:'right'">索引扫描次数</th>
+               <th data-options="field:'indexdef',sortable:true,width:'1000px',align:'left'">索引定义</th> 
+             </tr>
+           </thead>
+         </table> 
+       </div>
+     </div>
+   </div>
+ </div> 
+</div> 
+<div id="inspection_report_dialog_button">
+  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="inspection_report_dialog_insert" data-options="iconCls:'icon-add',width:80">创建</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="inspection_report_dialog_update" data-options="iconCls:'icon-edit',width:80">修改</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="inspection_report_dialog_delete" data-options="iconCls:'icon-remove',width:80">删除</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="inspection_report_dialog_export" data-options="iconCls:'icon-export',width:80">导出</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="inspection_report_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a> 
+  <a download="" href="" target="blank" id="downxls"></a>   
+</div>           
+<!--巡检报告管理窗口-->
+
 <!--操作员密码修改窗口-->
-<div id="password_update_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:true"> <!--modal是遮罩层--> 
+<div id="password_update_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:true,iconCls:'icon-password'"> <!--modal是遮罩层--> 
  <div style="padding:30px 5px 5px 10px">      
  <form id="password_update_dialog_form" method="post">
     <div style="margin-bottom:20px;text-align:center;">
@@ -678,7 +824,7 @@
 <!--操作员密码修改窗口-->
 
 <!--登录窗口-->
-<div id="login_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:false"> <!--modal是遮罩层--> 
+<div id="login_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:false,iconCls:'icon-lock'"> <!--modal是遮罩层--> 
  <div style="padding:50px 5px 5px 10px">      
  <form id="login_dialog_form" method="post">
     <div style="margin-bottom:20px;text-align:center;">
@@ -712,8 +858,8 @@ $(document).ready(function()
         'checkOnSelect':false,
         'selectOnCheck':false,
         'method':'post',
-        'sortName':'id',
-        'sortOrder':'asc',  
+        'sortName':'createtime',
+        'sortOrder':'desc',  
         'fitColumns':false,
         'multiSort':false,
         'pagination':true,
@@ -763,7 +909,8 @@ $(document).ready(function()
     });   
     
     //增加节点资料
-    $('#cy_insert_click').bind('click', function(){      
+    $('#cy_insert_click').bind('click', function(){  
+		$('#update_dialog').dialog({'iconCls':'icon-add'});    
         $('#update_dialog').dialog('open').dialog('center').dialog('setTitle','增加一个节点资料');  
         $('#update_dialog_form').form('clear'); 
         $('#update_dialog_form').form('load',{'ssh_port':'22','ssh_user':'postgres','pg_bin':'/usr/local/pgsql/bin/','pg_data':'/home/postgres/data/','pg_port':'5432','pg_database':'template1','pg_user':'postgres','ssh_authmethod':'key','bind_vip_authmethod':'key'});   
@@ -783,7 +930,8 @@ $(document).ready(function()
                      }
                 $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
                 var row = $('#dg').datagrid('getSelected');      
-            }  
+            } 
+		$('#update_dialog').dialog({'iconCls':'icon-edit'});     
         $('#update_dialog').dialog('open').dialog('center').dialog('setTitle','修改节点资料');
         $('#update_dialog_form').form('load',row);  
         url="./updatenode/";
@@ -1709,6 +1857,400 @@ $(document).ready(function()
         $('#promote_dialog').dialog('close');     
     });   
     
+	
+	//打开巡检报表管理窗口
+	//$('#inspection_report_dialog').dialog('resize',{width:$(window).width()-200,height:$(window).height()-150});
+	//$('#inspection_report_dialog').dialog('maximize');
+    $('#cy_inspection_report_click').bind('click', function(){    
+	    var row = $('#dg').datagrid('getSelected');    
+        if (!row)
+            {
+                var rows = $('#dg').datagrid('getChecked');  
+                if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                          return;
+                     }
+                $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                var row = $('#dg').datagrid('getSelected');      
+            }  
+        $('#inspection_report_dialog').dialog('open').dialog('center').dialog('setTitle','巡检报告管理－－'+row.node_name); 
+		
+		//清空数据
+		$('#inspection_report_list').datagrid('unselectAll');  
+		$('#inspection_report_list').datagrid('loadData', { total: 0, rows: [] });   
+		inspection_report_clear_data();
+		
+		
+		$('#inspection_report_list').datagrid({'url':'/inspection_report_list/?id='+row.id});
+		
+		//初始化巡检报告tab面板
+		$('#inspection_report_tabs').tabs('select',1);
+		$('#inspection_report_tabs').tabs('select',2);		
+		$('#inspection_report_tabs').tabs('select',3);		
+		$('#inspection_report_tabs').tabs('select',4);	
+		$('#inspection_report_tabs').tabs('select',5);	
+		$('#inspection_report_tabs').tabs('select',0);
+    }); 
+	
+	//清空数据
+	function inspection_report_clear_data(){
+		$('#inspection_report_state_list').datagrid('loadData', { total: 0, rows: [] }); 
+		$('#inspection_report_tablespace_list').datagrid('loadData', { total: 0, rows: [] });   
+		$('#inspection_report_role_list').datagrid('loadData', { total: 0, rows: [] });   
+		$('#inspection_report_database_list').datagrid('loadData', { total: 0, rows: [] });   
+		$('#inspection_report_table_list').datagrid('loadData', { total: 0, rows: [] }); 
+		$('#inspection_report_index_list').datagrid('loadData', { total: 0, rows: [] }); 
+	}
+	
+	//数据表属性初始化       
+    $('#inspection_report_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'createtime',
+        'sortOrder':'desc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'remoteSort':false,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'onClickRow':function(rowIndex, rowData){       
+            inspection_report_show();
+        },
+		'onLoadSuccess':function(data){
+			var rows = $('#inspection_report_list').datagrid('getRows')
+			if (rows.length>0){
+				$('#inspection_report_list').datagrid('selectRow',0);
+				inspection_report_show();
+			}
+		}
+    });  
+	
+	//在右边显示巡检报告
+	function inspection_report_show(){
+		var row = $('#inspection_report_list').datagrid('getSelected');  
+		if (!row){
+			$.messager.alert('系统提示',"请选择要查看的巡检报告", 'warning');   
+			return
+		}
+		//显示状态统计数据
+		$('#inspection_report_state_list').datagrid({'url':'/inspection_report_state_list/?inspection_report_id='+row.id});
+		//显示表空间
+		$('#inspection_report_tablespace_list').datagrid({'url':'/inspection_report_tablespace_list/?inspection_report_id='+row.id});
+		//显示角色
+		$('#inspection_report_role_list').datagrid({'url':'/inspection_report_role_list/?inspection_report_id='+row.id});
+		//显示数据库
+		$('#inspection_report_database_list').datagrid({'url':'/inspection_report_database_list/?inspection_report_id='+row.id});
+		//显示数据表
+		$('#inspection_report_table_list').datagrid({'url':'/inspection_report_table_list/?inspection_report_id='+row.id});
+		//显示索引
+		$('#inspection_report_index_list').datagrid({'url':'/inspection_report_index_list/?inspection_report_id='+row.id});
+	}
+	
+	//设置右边显示巡检报告--状态表格的格式
+	
+	$('#inspection_report_state_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'id',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+		'border':false
+    });  
+	
+	//设置右边显示巡检报告--表空间表格的格式
+	
+	$('#inspection_report_tablespace_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'spcname',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+		'border':false
+    });  
+	
+	//设置右边显示巡检报告--角色表格的格式
+	$('#inspection_report_role_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'rolname',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+		'border':false
+    });  
+	
+	//设置右边显示巡检报告--数据库表格的格式
+	$('#inspection_report_database_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'datname',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+		'border':false
+    });  
+	
+	//设置右边显示巡检报告--数据表表格的格式
+	$('#inspection_report_table_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'datname',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+		'border':false
+    });  
+	
+	//设置右边显示巡检报告--索引表格的格式
+	$('#inspection_report_index_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'datname',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+		'border':false
+    });  
+	
+	//创建巡检报告对话框
+	$('#inspection_report_dialog_insert').bind('click', function(){
+		$.messager.prompt('创建巡检报告', '请填写巡检报告名称:', function(r){
+			if (r){
+				inspection_report_make(r);
+			}
+		});
+	});
+	
+	//创建巡检报告
+	function inspection_report_make(r){
+		var row = $('#dg').datagrid('getSelected');    
+		if (!row)
+            {
+                $.messager.alert('系统提示',"请选择要创建的节点", 'warning');    
+                return;
+            } 
+		$.messager.progress(); 
+		$.ajax({
+                    type:"POST",
+                    url:"/inspection_report_make/",
+                    data:{id:row.id,report_name:r},
+                    success:function(result){
+                        $.messager.progress('close');   
+                        if (result.return_code=="FAIL")                               
+                            {                       
+                                if ( result.show_login_dialog == 1)
+                                    {   
+                                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                                    }
+                                else
+                                    {
+                                        $.messager.alert('错误提示',result.return_msg, 'error');   
+                                    }
+                            }
+                        else
+                            {
+                                $.messager.alert('系统提示',result.return_msg, 'info');   
+                                var row = $('#inspection_report_list').datagrid('reload');  
+                            }  
+                    },
+                    dataType:"json"
+               });  
+	}
+	
+	//修改巡检报告
+	$('#inspection_report_dialog_update').bind('click', function(){
+		var row = $('#inspection_report_list').datagrid('getSelected');  
+		if (!row){
+			$.messager.alert('系统提示','请选择要修改的巡检报告', 'warning');   
+			return
+		}
+		$.messager.prompt('修改巡检报告', '请填写新的巡检报告名称:', function(r){
+			if (r){
+				$.messager.progress(); 
+				$.ajax({
+		                    type:"POST",
+		                    url:"/inspection_report_update/",
+		                    data:{inspection_report_id:row.id,report_name:r},
+		                    success:function(result){
+		                        $.messager.progress('close');   
+		                        if (result.return_code=="FAIL")                               
+		                            {                       
+		                                if ( result.show_login_dialog == 1)
+		                                    {   
+		                                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+		                                    }
+		                                else
+		                                    {
+		                                        $.messager.alert('错误提示',result.return_msg, 'error');   
+		                                    }
+		                            }
+		                        else
+		                            {
+		                                $.messager.alert('系统提示',result.return_msg, 'info');   
+										var index = $('#inspection_report_list').datagrid('getRowIndex', row)
+		                        		$('#inspection_report_list').datagrid('updateRow',{'index':index , 'row' : {'report_name':r}});                   
+		                            }  
+		                    },
+		                    dataType:"json"
+		               });  
+			}
+		});
+		
+	});
+	
+	//删除巡检报告
+	$('#inspection_report_dialog_delete').bind('click', function(){
+		var row = $('#inspection_report_list').datagrid('getSelected');  
+		if (!row){
+			$.messager.alert('系统提示','请选择要删除的巡检报告', 'warning');   
+			return
+		}
+		$.messager.confirm('删除巡检报告', '你确认要删除所选的巡检报告吗？', function(r){
+			if (r){
+				$.messager.progress(); 
+				$.ajax({
+		                    type:"POST",
+		                    url:"/inspection_report_delete/",
+		                    data:{inspection_report_id:row.id,report_name:r},
+		                    success:function(result){
+		                        $.messager.progress('close');   
+		                        if (result.return_code=="FAIL")                               
+		                            {                       
+		                                if ( result.show_login_dialog == 1)
+		                                    {   
+		                                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+		                                    }
+		                                else
+		                                    {
+		                                        $.messager.alert('错误提示',result.return_msg, 'error');   
+		                                    }
+		                            }
+		                        else
+		                            {
+		                                $.messager.alert('系统提示',result.return_msg, 'info');   
+	                                    var index = $('#inspection_report_list').datagrid('getRowIndex',row);      
+	                                    $('#inspection_report_list').datagrid('deleteRow',index);
+										inspection_report_clear_data();
+		                            }  
+		                    },
+		                    dataType:"json"
+		               });  
+			}
+		});
+		
+	});
+	
+	
+	//导出巡检报告数据
+	$('#inspection_report_dialog_export').bind('click', function(){
+		var row = $('#inspection_report_list').datagrid('getSelected');  
+		if (!row){
+			$.messager.alert('系统提示',"请选择要导出的巡检报告", 'warning');   
+			return
+		}
+		$.messager.progress(); 
+		$.ajax({
+                    type:"POST",
+                    url:"/inspection_report_export/",
+                    data:{inspection_report_id:row.id},
+                    success:function(result){
+                        $.messager.progress('close');   
+                        if (result.return_code=="FAIL")                               
+                            {                       
+                                if ( result.show_login_dialog == 1)
+                                    {   
+                                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                                    }
+                                else
+                                    {
+                                        $.messager.alert('错误提示',result.return_msg, 'error');   
+                                    }
+                            }
+                        else
+                            {
+								var downxls_obj = document.getElementById("downxls");  
+				                downxls_obj.href=result.url;  
+				                downxls_obj.download=result.filename;  
+				                downxls_obj.click();  
+                            }  
+                    },
+                    dataType:"json"
+               });  
+		//document.location.href="/inspection_report_export/?inspection_report_id="+row.id;
+	});
+	
+	
+	//巡检报表管理窗口－－取消按钮
+    $('#inspection_report_dialog_cancel').bind('click', function(){
+        $('#inspection_report_dialog').dialog('close');     
+    });  
     
     //操作员修改登录密码
     $('#cy_password_click').bind('click', function(){      
