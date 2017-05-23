@@ -18,6 +18,9 @@
 .textbox-default-width-long{
   width: 705px;
 }
+.textbox-default-width-center{
+  width: 405px;
+}
 .dialog-default-width{
   width: 900px;
 }
@@ -25,7 +28,7 @@
 <body>
 
 
-<div id='Loading' style="position:absolute;z-index:1000;top:0px;left:0px;width:100%;height:2000;background:#f2f2f2;text-align:center;padding-top: 20%;">
+<div id='Loading' style="position:absolute;z-index:1000;top:0px;left:0px;width:100%;height:3000;background:#f2f2f2;text-align:center;padding-top: 20%;">
 <h1><image src='./themes/default/images/loading.gif'/><font color="#15428B">加载中···</font></h1>
 </div>
 
@@ -667,6 +670,7 @@
           <th field="id" checkbox="true"></th>
           <th data-options="field:'report_name',sortable:true,width:'130px'">报告名称</th> 
           <th data-options="field:'createtime',sortable:true,width:'100px'">生成时间</th>
+		  <th data-options="field:'count_finish',sortable:true,width:'100px'">统计已完成</th>
           <th data-options="field:'username',sortable:true,width:'80px'">操作员账号</th>        
         </tr>
       </thead>
@@ -801,6 +805,37 @@
   <a download="" href="" target="blank" id="downxls"></a>   
 </div>           
 <!--巡检报告管理窗口-->
+
+<!--创建巡检报告对话窗口-->
+<div id="inspection_report_insert_dialog" class="easyui-dialog dialog-default-width" data-options="modal:true,buttons:'#inspection_report_insert_dialog_buttons',closed:true,height:268,closable:true"> <!--modal是遮罩层--> 
+ <div style="padding:30px 5px 5px 10px">      
+   <form id="inspection_report_insert_dialog_form" method="post"> 
+     <table cellpadding="3" width="99%">
+       <tr>
+         <td align="center" width="120">填写巡检报告名称</td>
+         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="report_name" data-options="required:true"  ></input></td> 
+       </tr>  
+       <tr>
+         <td align="center" width="120">选择统计的数据库</td>
+         <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="database" id="inspection_report_insert_database" data-options="editable:false,panelHeight:'auto',valueField: 'datname',textField: 'dattext'"></select></td> 
+       </tr>
+       <tr>
+         <td align="center" width="120">表行数统计进程数</td>
+         <td colspan="3"><input class="easyui-textbox textbox-default-width-long" name="count_recordnum_processes" data-options="required:true,value:'0'"  ></input></td> 
+       </tr> 
+       <tr>
+         <td align="center" width="120">是否统计系统对象</td>
+         <td colspan="3"><select class="easyui-combobox textbox-default-width-long" name="count_system_obj" id="count_system_obj" data-options="editable:false,panelHeight:'auto',valueField: 'value',textField: 'label',data: [{label: '不统计',value: '不统计',selected:true},{label: '统计',value: '统计'}]"></select></td> 
+       </tr>   
+     </table>         
+   </form>
+ </div>
+</div>
+<div id="inspection_report_insert_dialog_buttons">
+  <a href="javascript:void(0)" class="easyui-linkbutton c2" id="inspection_report_insert_dialog_save" data-options="iconCls:'icon-save',width:100">确认创建</a>
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="inspection_report_insert_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
+</div>                    
+<!--创建巡检报告对话窗口-->
 
 <!--操作员密码修改窗口-->
 <div id="password_update_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:true,iconCls:'icon-password'"> <!--modal是遮罩层--> 
@@ -1331,11 +1366,11 @@ $(document).ready(function()
                             {
                                 $.messager.alert('错误提示',"执行失败,详情见 [ 执行结果 ] 输出框", 'error');  
                                 $('#exec_result').textbox('setValue',result.return_msg);  
-								$('#service_status').textbox('setValue',result.service_status);    
-		                        $('#service_type').textbox('setValue',result.service_type);    
-		                        $('#pg_version').textbox('setValue',result.pg_version);    
-		                        var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
-		                        $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
+                                $('#service_status').textbox('setValue',result.service_status);    
+                                $('#service_type').textbox('setValue',result.service_type);    
+                                $('#pg_version').textbox('setValue',result.pg_version);    
+                                var index = $('#dg').datagrid('getRowIndex', $("#dg").datagrid('getSelected'))
+                                $('#dg').datagrid('updateRow',{'index':index , 'row' : {'service_status':result.service_status , 'service_type':result.service_type , 'pg_version':result.pg_version}});                   
                             }
                     }   
                 else
@@ -1751,7 +1786,7 @@ $(document).ready(function()
                         }  
                 },
                 dataType:"json"
-            });      
+            }); 
     });
     
     //主备切换管理－－一键切换
@@ -1914,7 +1949,7 @@ $(document).ready(function()
         'sortOrder':'desc',  
         'fitColumns':false,
         'multiSort':false,
-        'remoteSort':false,
+        'remoteSort':true,
         'height':'100%',
         'width':'100%',
         'idField':'id',
@@ -2081,12 +2116,92 @@ $(document).ready(function()
 	
 	//创建巡检报告对话框
 	$('#inspection_report_dialog_insert').bind('click', function(){
-		$.messager.prompt('创建巡检报告', '请填写巡检报告名称:', function(r){
-			if (r){
-				inspection_report_make(r);
-			}
-		});
+		var row = $('#dg').datagrid('getSelected');    
+		if (!row)
+            {
+                $.messager.alert('系统提示',"请选择要创建的节点", 'warning');    
+                return;
+            } 
+		$('#inspection_report_insert_dialog').dialog('open').dialog('center').dialog('setTitle','创建巡检报告');   
+		$('#inspection_report_insert_dialog_form').form('clear'); 
+		$.messager.progress(); 
+		$.ajax({
+                    type:"POST",
+                    url:"/get_database_list/",
+                    data:{id:row.id},
+                    success:function(result){
+                        $.messager.progress('close');   
+                        if (result.return_code=="FAIL")                               
+                            {                       
+                                if ( result.show_login_dialog == 1)
+                                    {   
+										$('#inspection_report_insert_dialog').dialog('close'); 
+                                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                                    }
+                                else
+                                    {
+                                        $.messager.alert('错误提示',result.return_msg, 'error');   
+                                    }
+                            }
+                        else
+                            {
+								result.unshift({ "datname": "", "dattext": "所有数据库" });  
+                                $('#inspection_report_insert_database').combobox({data:result})
+                            }  
+                    },
+                    dataType:"json"
+               });  
+		$('#inspection_report_insert_dialog_form').form('load',{'count_recordnum_processes':'0','count_system_obj':'不统计'});        
 	});
+	
+	//创建巡检报告对话框－－确认创建按钮
+    $('#inspection_report_insert_dialog_save').bind('click', function(){
+		var row = $('#dg').datagrid('getSelected');    
+		if (!row)
+            {
+                $.messager.alert('系统提示',"请选择要创建的节点", 'warning');    
+                return;
+            } 
+        $('#inspection_report_insert_dialog_form').form('submit', {
+            "url":'./inspection_report_make/', 
+            onSubmit: function(param){
+				param.id=row.id;
+                var validate = $(this).form('validate'); 
+                if ( validate ){
+                    $.messager.progress();    
+                    return true;
+                }
+                return false;
+            },
+            success: function(result){
+                $.messager.progress('close');    
+                var result = eval('('+result+')');  
+                if (result.return_code=="FAIL")                               
+                    {
+                        if ( result.show_login_dialog == 1)
+                            {   
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                        else
+                            {
+                                $.messager.alert('错误提示',result.return_msg, 'error');            
+                            }
+                        
+                    }   
+                else
+                    { 
+						$.messager.alert('系统提示',result.return_msg, 'info');   
+                        $('#inspection_report_list').datagrid('reload');   
+						$('#inspection_report_insert_dialog').dialog('close');
+                    }       
+           }
+        });   
+    });  
+	
+	//创建巡检报告对话框－－取消按钮
+    $('#inspection_report_insert_dialog_cancel').bind('click', function(){
+        $('#inspection_report_insert_dialog').dialog('close');     
+    });  
 	
 	//创建巡检报告
 	function inspection_report_make(r){

@@ -132,6 +132,7 @@ CREATE TABLE inspection_report
 	nodeid integer not null,
 	report_name   text not null,
 	createtime timestamp not null default now(),
+	count_finish text not null default '否',
 	username text not null
 );
 COMMENT ON TABLE inspection_report IS '巡检报表';
@@ -139,7 +140,9 @@ COMMENT ON COLUMN inspection_report.id IS '系统编号';
 COMMENT ON COLUMN inspection_report.nodeid IS '节点id号';
 COMMENT ON COLUMN inspection_report.report_name IS '报表名称';
 COMMENT ON COLUMN inspection_report.createtime IS '生成日期';
+COMMENT ON COLUMN inspection_report.count_finish IS '统计已完成';
 COMMENT ON COLUMN inspection_report.username IS '操作员账号';
+
 
 CREATE INDEX inspection_report_nodeid_idx ON inspection_report USING btree(nodeid);
 
