@@ -16,16 +16,31 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 * Ip：192.168.1.10
 * os：centos 7.0 
-* golang: go version go1.7.4 linux/amd64
+* golang: go version go1.8.3 linux/amd64
 * Postgresql：9.6.1 
 
 ### 三、Pgclusteradmin环境需求
 
-#### 安装golang
+#### 源码安装golang
 
-* [root@ad ~]# yum install golang-1.7.4-1.el6.x86_64.rpm  
-* [root@ad ~]# yum install golang-src-1.7.4-1.el6.noarch.rpm
-* [root@ad ~]# yum install golang-bin-1.7.4-1.el6.x86_64.rpm
+* [root@ad ~]# wget https://storage.googleapis.com/golang/go1.8.3.linux-amd64.tar.gz  
+* [root@ad ~]# tar zxf go1.8.3.linux-amd64.tar.gz -C /usr/local
+
+#### 配置golang环境变量
+
+	[root@ad go]# vim /etc/profile
+	
+	GOROOT=/usr/local/go
+	GOBIN=$GOROOT/bin
+	PATH=$PATH:$GOBIN
+	GOPATH=/home/go
+	
+	export GOROOT GOBIN GOPATH PATH
+	
+	保存退出
+	[root@ad go]# source /etc/profile
+	[root@nfs go]# go version
+	go version go1.8.3 linux/amd64
 
 #### 安装postgresql 
 
@@ -79,7 +94,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 －－ssh支持包
 
-    [root@ad ~]# cd /usr/lib/golang/src
+    [root@ad ~]# cd /usr/local/go/src
     [root@ad src]# mkdir golang.org
     [root@ad src]# cd golang.org/
     [root@ad golang.org]# mkdir x
@@ -93,7 +108,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 －－session支持包
 
-    [root@ad x]# cd /usr/lib/golang/src
+    [root@ad x]# cd /usr/local/go/src
     [root@ad src]# mkdir github.com
     [root@ad src]# cd github.com
     [root@ad github.com]# mkdir astaxie
@@ -108,7 +123,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 －－postgresql操作支持包
 
-    [root@ad astaxie]# cd /usr/lib/golang/src/github.com/
+    [root@ad astaxie]# cd /usr/local/go/src/github.com/
     [root@ad github.com]# mkdir jackc
     [root@ad github.com]# cd jackc
     [root@ad jackc]# git clone https://github.com/jackc/pgx
@@ -121,7 +136,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 	
 －－golang excel驱动包
 
-	[root@ad github.com]# cd /usr/lib/golang/src/github.com/
+	[root@ad github.com]# cd /usr/local/go/src/github.com/
 	[root@ad github.com]# mkdir tealeg
 	[root@ad github.com]# cd tealeg/
 	[root@ad tealeg]# git clone https://github.com/tealeg/xlsx
@@ -162,7 +177,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 	
 	    var config pgx.ConnConfig
 	
-	    config.Host = "192.168.1.10" //数据库主机host或ip
+	    config.Host = "127.0.0.1" //数据库主机host或ip
 	    config.User = "postgres"     //连接用户
 	    config.Password = "pgsql"    //用户密码
 	    config.Database = "pgcluster" //连接数据库名
@@ -264,6 +279,12 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 ![](gui_image/巡检报告index.png)
     
 ### 六、更新日志
+
+#### 2017-6-19
+
+* 1、修正函数ssh_connect中ssh时ssh: must specify HostKeyCallback报错问题
+* 2、修正str_is_ip函数ip地址判断BUG
+* 3、修正get_node_ip_bind_status函数在一些centos下执行存在的问题解决办法
 
 #### 2017-5-23
 

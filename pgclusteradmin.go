@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -5986,11 +5987,17 @@ func get_node_ip_bind_status(nodeid int, s chan Stdout_and_stderr) {
 		s <- out
 		return
 	}
-	//获取ip绑定情况
+	//获取ip绑定情况,如果运行提示找不到ip这个命令，则在登录的主机上把ip这个命令软连接到/usr/bin目录下即可，ln -s /sbin/ip /usr/bin/ip
 	cmd := "cmdpath=`which 'ip'`;$cmdpath a"
+	//stdout, stderr := ssh_run(row.Bind_vip_authmethod, "root", row.Bind_vip_user, row.Bind_vip_password, row.Host, row.Ssh_port, cmd)
 	stdout, stderr := ssh_run(row.Ssh_authmethod, "postgres", row.Ssh_user, row.Ssh_password, row.Host, row.Ssh_port, cmd)
 	out.Stdout = stdout
 	out.Stderr = stderr
+	if stderr != "" && row.Bind_vip_user != "" {
+		stdout, stderr := ssh_run(row.Bind_vip_authmethod, "root", row.Bind_vip_user, row.Bind_vip_password, row.Host, row.Ssh_port, cmd)
+		out.Stdout = stdout
+		out.Stderr = stderr
+	}
 	s <- out
 	return
 }
@@ -6352,6 +6359,9 @@ func ssh_connect(authmethod string, user string, password string, host string, p
 		User:    user,
 		Auth:    auth,
 		Timeout: 30 * time.Second,
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			return nil
+		},
 	}
 
 	addr = fmt.Sprintf("%s:%d", host, port)
@@ -6595,7 +6605,7 @@ func str_is_ip(val string) (ret_val bool) {
 		if err != nil {
 			return false
 		}
-		if v <= 0 || v > 255 {
+		if v < 0 || v > 255 {
 			return false
 		}
 	}
@@ -6615,7 +6625,7 @@ func extractConfig() pgx.ConnConfig {
 
 	var config pgx.ConnConfig
 
-	config.Host = "192.168.1.10"  //数据库主机host或ip
+	config.Host = "127.0.0.1"     //数据库主机host或ip
 	config.User = "postgres"      //连接用户
 	config.Password = "pgsql"     //用户密码
 	config.Database = "pgcluster" //连接数据库名
@@ -6635,7 +6645,31 @@ key -- postgres用户的私钥证书,证书类型可以是“DSA”或“RSA”
 
 func get_postgres_private_key() (key string) {
 	postgres_private_key := `-----BEGIN RSA PRIVATE KEY-----
-数据库服务管理用户私钥，可以使用rsa或者dsa
+MIIEoQIBAAKCAQEAsyUhs+HjqNodZDig75WIk2vXR7HUp8wDgZitLm1MDKsyQnSJ
+1GEyeKID70SsM1ZxoGZf/IdcXHsYTMxIZr2r3+xfT0i2J8b05MhTwDe+F0wsTmV+
+hZqqjeGXsRnD+db18YlHly/+pnDAT8hDStwB2sMMynJSPXmKjV1oudhrhpt1+sKm
+bxqhIZ7/yUqZ+pe1j9hD33/EoP8hYYbMf8w37JI1yLZXsGEvrkCEAEKFhIW7LYDO
+uj5iVxlFyPFS+Ss4/M+/P0BIQyy92T9BJA3nt/Eg7tFiHJd9zknNaDYhk/mPmAlP
+neB7iih7JFAEAfl1aj8pfpFR9DBAG2TDbI4vUwIBIwKCAQAFHlFrihxyieOVJjB7
+37Nx7SNocsuPxAAZpUbGz+w64FHkpD5zyENFRnUkF+epsgM/GN4ryVppCtTO/oW5
+yuenT+V3SzhniVd0QDzoPBtfwFkJjd8LIa0Z/yGXWIHxMgcG5qpGJfFVNmvlBbjH
+n+LLvG4UaaqUCslxwNcbQLKdchu0IoaRp5U6uvUG1DuF37bvBnFPWAbYeT0TCem5
+6JryiWHm/SsYU1sBxlxxDszSj2bRIQU4570hi6dpb/IrDo8LFPivCMqmb9+Zc+rb
+oyaN1vcGhQj0nncLacNX7dzS3UHeIuy/iY5S4HYHwLDvtMylvgjho2OGU7rLEs2Y
+WOSzAoGBANldTMb69BiI7foA+Ob0iGuPkrMbiNzRCQn4zSiI/8Eq+gsqG6n/eAUn
+NW2+NAluvs+4POm5OezO2uiPbgRqx41mILfmIiCg+zSiNUK04UHEvSCBj/BUow+R
+cUl4/su1894J2ZxUpU/WGWMXOICcXWALDvHzF5tgBsaP/ABWWvqVAoGBANL8vXmK
+PSGRIYXZTY+4eUdSZBLq7fg3Yr3OXq+L/0eYz8gJ/cldg7lI7HLNCHtMK9zdwC45
+VZnyJnnPNTKrZh0S0Qdq6nLg5fc8MOJn3mCO0DqJEThWSietYs7psiUJxbAvaVUZ
+bLZfXvT9v1Kf5Bq2NQCyIxs2tu/H1qdCC/BHAoGBAMa7s+kf9R2/BXbcUUgwB7LM
+aN5FD2rNvx8PXHzVBxcCuLnAGUr4MzfpVWumlfn+2leD3+uiCRMGRHza6D6Ngz9z
+UR0qLdSwcKUmlxhq3JPnE1DrfElx9Ct9qWe/FNeByQWFWT55Rq9kqX8rLFhUcqD0
+KuvW8QMV95D4q+MNH/sLAoGASFanXN7wY0ezuNzKIqWl7JFG4eoltDA/HIFFCPzM
+jZN6cHh0RQoeiKtJwPXXBbO3RGlJNGttzmGmyq1xUzNzd66uESv4nGpdeVZ3KQ2r
+VE44w5y1cma6Vr8akBWcKfS4zrErbaJRKJW6KBx8HFQTsWMK26rKNTdUqftfic2A
+b6MCgYAlpcLiHzlS79n+pR80KIdufGbdwKH6Vq4Y0oQcS+nDfpA0tZOr+wyMxh3S
+H48/kP88+9HGsfoe5AcY3uTpblTFG+S4uVTNvr6Sh4ID+vddiYYTCEUUatq5mjFc
+QDSdluFN8mt9DerjwBqG9HnQPpj4cIfF2kNbHu5MduEu0bkp4A==
 -----END RSA PRIVATE KEY-----`
 	return postgres_private_key
 }
@@ -6650,8 +6684,32 @@ key -- root用户的私钥证书,证书类型可以是“DSA”或“RSA”
 */
 
 func get_root_private_key() (key string) {
-	root_private_key := `-----BEGIN DSA PRIVATE KEY-----
-系统管理员root用户私钥，可以使用rsa或者dsa
------END DSA PRIVATE KEY-----`
+	root_private_key := `-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA3cm2Ms3Ip59lF3UYYhh+M4HoInFJwbJPcG4Lqtc4K9FatcKC
+FcHRicp3wDgh326Aa0iHOZ7lMLTlYvjsY/mQM8eWmDrakFyQJ7TqPfU/4cwUu7Lg
+yg8xEZoH8oyE/6N18UWK9mX/wAXZu/KD7YzhJsGYTb9IRItW1JvLbNEE4DkBv1tF
+/lIy/gdZ1Cuu1Vp9HA0WWBKhksXU9r7LE8wrEXwso6L/akciFkyxS+04MMwTDV5a
+cRmwKncskhLvdwVwD34Tjz7jLVOif8G7AUGRd6EkFxJQ8X2Oy6cIg/YbMg0czybh
+NTE5JNYVSC5FOzfiyhYvQxut457vs7MXlYA0fwIBIwKCAQEAmBVJvG/aDIqOdnwt
++h9sexdAF54j8ojmA/OwOqI1JVxbdVItUL9rHKgXmcAXOh/jB7y0f0hipQ5UJpwP
+z4aOxGuadwPJEoidXQ5XevFQYFFtTYH5OhkLtExdOJre2y5CPwsddcJI+LON/TiU
++qm+9gEX+sxOz+qErwu+sQRbHWejwc38lWbQrnzHnpFaYjT0IcjSuKC41gBh3brR
+ILnU83XHbXyrbefQ+9DyJOn+wFp4zm1+2zwU5AMbgLpd1EFU6P61fJnCVinaTQgF
++p2fp7GKkWgEDLzClwZKQYuvZVhntHIZTWpc5oFXSp3anDGu9caQR+cwt17XitBg
+LT9pSwKBgQD+jcknnYdFTgYVF/Nq74W+glLcfbmkKYz5psyY37trbzljtGkE9ZGr
+x9kd0inDwdo9CsAcpl4l7W25dbQHAbYwqgTOZmd4rsJRxzHmP9ieFQ1C/4fdH/YL
+UxX99ZXnap/VrzBsyxFSOTbgVEvSxBstB2OuDSPM0ZUJOJu/e+WK+wKBgQDfDEW4
+sZT9XDX29PmgFpzakyAGjRlFMSL3Qexr5FcTvzcGGjmAdG4QNI2Hrpjg68M7Kuk6
+IFlBGy+Vq08fn8VOPFsnKHcvFj7yXY7MCUMVOLD3A31t6Z7nsafeRB8pU6Gv43q6
+Lo90xiKVpxGTqKmWnEZEInFksUpBe1IhLPOFTQKBgA6LwloJAGpcOtyiSGyCty91
+KU5tlZRaJVAYKPLK9MRPf59MI0IcqT0EGwkEse3t0fTcCvpSpktPZVsOCkmLEbmj
+ULtWTw413zfffzG6gWgedclQbinkkbeBFzMVWQXo1e70EWVNbrQ9yJ8awoEShTXF
+6HBYhbPuuA8nzmK2n2cHAoGBAJKTCT7bGMPAQLg6lWkzbmO/xJaXPH3tFvpBQ5db
+ia3kDjc1zgP0vVsbOG8a9r+w32FlV29XFhTXWcjBCBwYiPjl1YAh5+u+KV1wrkuR
+DtNuZamjNSr4m5+SAJlf9zhqKGxFB4GpkXifddAOs8du1dgAS26aSoP/efCEPUkA
+SEGnAoGBALNJ+49DgKMjRXQoK356wNCA9KxLkXRoOALY56jkEMSKlcDfJNTL6YzH
+NeUH4stHMhn306jg12UuRfPdHI6ZkOkonXmOnnn1u/7PyV7pbvQZm60b6of0iVFn
+hGQ151ulrPkQgD8GuMbY3E5xBfTOr4PMkEMe07cmA/5knGFtjMVW
+-----END RSA PRIVATE KEY-----`
 	return root_private_key
 }
