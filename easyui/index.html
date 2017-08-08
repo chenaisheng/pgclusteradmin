@@ -753,11 +753,16 @@
                <th data-options="field:'datname',sortable:true,width:'130px'">数据库名</th> 
                <th data-options="field:'schemaname',sortable:true,width:'130px'">所属模式</th> 
                <th data-options="field:'tablename',sortable:true,width:'150px',align:'left'">表名</th>
+			   <th data-options="field:'tabletype',sortable:true,width:'80px',align:'left'">表类型</th>
                <th data-options="field:'tablecomment',sortable:true,width:'150px',align:'left'">注释</th>
                <th data-options="field:'tableowner',sortable:true,width:'70px',align:'left'">所有者</th>
                <th data-options="field:'tablespace',sortable:true,width:'80px',align:'center'">存储表空间</th>
+			   <th data-options="field:'reltuples',sortable:true,width:'100px',align:'right'">记录数（估值）</th>
                <th data-options="field:'rownum',sortable:true,width:'75px',align:'right'">记录数</th>
+			   <th data-options="field:'rownum_deviation',sortable:true,width:'75px',align:'right'">记录数差异</th>
                <th data-options="field:'relationsize',sortable:true,width:'100px',align:'left'">表文件占用空间</th>
+			   <th data-options="field:'relpages',sortable:true,width:'100px',align:'right'">占用盘页（估值）</th>
+			   <th data-options="field:'row_of_size',sortable:true,width:'100px',align:'left'">每行占用空间</th>
                <th data-options="field:'indexnum',sortable:true,width:'75px',align:'right'">索引数</th>
                <th data-options="field:'indexsize',sortable:true,width:'120px',align:'left'">索引文件占用空间</th>
                <th data-options="field:'tablesize',sortable:true,width:'120px',align:'left'">表相关文件占用空间</th>	
@@ -769,6 +774,22 @@
                <th data-options="field:'last_autovacuum',sortable:true,width:'130px'">自动清理时间</th>
                <th data-options="field:'last_analyze',sortable:true,width:'130px'">手动分析时间</th>
                <th data-options="field:'last_autoanalyze',sortable:true,width:'130px'">自动分析时间</th>
+             </tr>
+           </thead>
+         </table> 
+       </div>
+	   <div title="外部表" style="padding:0px"> 
+         <table id="inspection_report_foreign_table_list" class="easyui-datagrid">   
+           <thead>
+             <tr>
+               <th data-options="field:'datname',sortable:true,width:'130px'">数据库名</th> 
+               <th data-options="field:'schemaname',sortable:true,width:'130px'">所属模式</th> 
+               <th data-options="field:'tablename',sortable:true,width:'150px',align:'left'">表名</th>
+			   <th data-options="field:'srvname',sortable:true,width:'150px',align:'left'">外部服务器名称</th>
+			   <th data-options="field:'srvoptions',sortable:true,width:'350px',align:'left'">外部服务器配置</th>
+			   <th data-options="field:'ftoptions',sortable:true,width:'350px',align:'left'">外部表名称</th>
+               <th data-options="field:'tablecomment',sortable:true,width:'150px',align:'left'">注释</th>
+               <th data-options="field:'tableowner',sortable:true,width:'70px',align:'left'">所有者</th>
              </tr>
            </thead>
          </table> 
@@ -1925,6 +1946,7 @@ $(document).ready(function()
 		$('#inspection_report_tabs').tabs('select',3);		
 		$('#inspection_report_tabs').tabs('select',4);	
 		$('#inspection_report_tabs').tabs('select',5);	
+		$('#inspection_report_tabs').tabs('select',6);	
 		$('#inspection_report_tabs').tabs('select',0);
     }); 
 	
@@ -1935,6 +1957,7 @@ $(document).ready(function()
 		$('#inspection_report_role_list').datagrid('loadData', { total: 0, rows: [] });   
 		$('#inspection_report_database_list').datagrid('loadData', { total: 0, rows: [] });   
 		$('#inspection_report_table_list').datagrid('loadData', { total: 0, rows: [] }); 
+		$('#inspection_report_foreign_table_list').datagrid('loadData', { total: 0, rows: [] }); 
 		$('#inspection_report_index_list').datagrid('loadData', { total: 0, rows: [] }); 
 	}
 	
@@ -1982,6 +2005,8 @@ $(document).ready(function()
 		$('#inspection_report_database_list').datagrid({'url':'/inspection_report_database_list/?inspection_report_id='+row.id});
 		//显示数据表
 		$('#inspection_report_table_list').datagrid({'url':'/inspection_report_table_list/?inspection_report_id='+row.id});
+		//显示外部表
+		$('#inspection_report_foreign_table_list').datagrid({'url':'/inspection_report_foreign_table_list/?inspection_report_id='+row.id});
 		//显示索引
 		$('#inspection_report_index_list').datagrid({'url':'/inspection_report_index_list/?inspection_report_id='+row.id});
 	}
@@ -2074,6 +2099,27 @@ $(document).ready(function()
 	
 	//设置右边显示巡检报告--数据表表格的格式
 	$('#inspection_report_table_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'datname',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'id',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+		'border':false
+    });  
+	
+	//设置右边显示巡检报告--外部表表格的格式
+	$('#inspection_report_foreign_table_list').datagrid({
         'rownumbers':true,
         'singleSelect':true,
         'checkOnSelect':false,
