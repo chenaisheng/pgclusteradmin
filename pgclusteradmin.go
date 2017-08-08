@@ -172,6 +172,8 @@ func main() {
 	http.HandleFunc("/inspection_report_database_list/", inspection_report_database_listHandler)
 	//巡检报告－－数据表
 	http.HandleFunc("/inspection_report_table_list/", inspection_report_table_listHandler)
+	//巡检报告－－外部表
+	http.HandleFunc("/inspection_report_foreign_table_list/", inspection_report_foreign_table_listHandler)
 	//巡检报告－－索引
 	http.HandleFunc("/inspection_report_index_list/", inspection_report_index_listHandler)
 	//修改巡检报告名称
@@ -2949,13 +2951,14 @@ func inspection_report_makeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chan_num := 2 + databases.Total*2
+	chan_num := 2 + databases.Total*3
 	end := make(chan Stdout_and_stderr, chan_num)
-	//异步生成数据表和索引
+	//异步生成数据表、索引和外部表
 	for i := 0; i < databases.Total; i++ {
 		row.Pg_database = databases.Rows[i]
 		go inspection_report_table_make(inspection_report_id, r.FormValue("count_system_obj"), row, end)
 		go inspection_report_index_make(inspection_report_id, r.FormValue("count_system_obj"), row, end)
+		go inspection_report_foreign_table_make(inspection_report_id, row, end)
 	}
 	//异步生成用户角色
 	go inspection_report_role_make(inspection_report_id, row, end)
@@ -2990,7 +2993,7 @@ func inspection_report_makeHandler(w http.ResponseWriter, r *http.Request) {
 		OutputJson(w, "FAIL", error_msg, 0)
 		go write_log(remote_ip, modlename, username, "Error", error_msg)
 
-		//生活数据出错异步删除巡检报告
+		//数据出错异步删除巡检报告
 		delete_chan := make(chan Stdout_and_stderr)
 		go inspection_report_delete(inspection_report_id, delete_chan)
 		return
@@ -3200,9 +3203,33 @@ func inspection_report_state_make(inspection_report_id int, row Row, s chan Stdo
 				'节点类号' AS subject,
 				'` + sql_data_encode(row.Service_type) + `' AS val
 			UNION ALL
+			SELECT 				
+				'timezone配置' AS subject,
+				current_setting('timezone') AS val
+			UNION ALL
+			SELECT 				
+				'shared_buffers配置' AS subject,
+				current_setting('shared_buffers') AS val
+			UNION ALL
+			SELECT 				
+				'autovacuum配置' AS subject,
+				current_setting('autovacuum') AS val
+			UNION ALL
+			SELECT 				
+				'log_destination配置' AS subject,
+				current_setting('log_destination') AS val
+			UNION ALL
+			SELECT 				
+				'logging_collector配置' AS subject,
+				current_setting('logging_collector') AS val
+			UNION ALL
+			SELECT 				
+				'log_timezone配置' AS subject,
+				current_setting('log_timezone') AS val
+			UNION ALL
 			SELECT
 				'占用空间' AS subject,
-				pg_catalog.pg_size_pretty(sum(spcsize))::TEXT AS val
+				COALESCE(pg_catalog.pg_size_pretty(sum(spcsize))::TEXT,'0') AS val
 			FROM
 				inspection_report_tablespace
 			WHERE
@@ -3239,6 +3266,14 @@ func inspection_report_state_make(inspection_report_id int, row Row, s chan Stdo
 				inspection_report_table
 			WHERE
 				inspection_report_table.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
+			UNION ALL
+			SELECT
+				'外部表数' AS subject,
+				COUNT(1)::TEXT AS val
+			FROM
+				inspection_report_foreign_table
+			WHERE
+				inspection_report_foreign_table.inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `
 			UNION ALL
 			SELECT
 				'索引数' AS subject,
@@ -4536,11 +4571,16 @@ type Inspection_report_table struct {
 	Datname          string `json:"datname"`
 	Schemaname       string `json:"schemaname"`
 	Tablename        string `json:"tablename"`
+	Tabletype        string `json:"tabletype"`
 	Tablecomment     string `json:"tablecomment"`
 	Tableowner       string `json:"tableowner"`
 	Tablespace       string `json:"tablespace"`
-	Rownum           int64  `json:"rownum"`
+	Reltuples        int64  `json:"reltuples"`
+	Rownum           string `json:"rownum"`
+	Rownum_deviation string `json:"rownum_deviation"`
 	Relationsize     string `json:"relationsize"`
+	Relpages         int64  `json:"relpages"`
+	Row_of_size      string `json:"row_of_size"`
 	Indexnum         int    `json:"indexnum"`
 	Indexsize        string `json:"indexsize"`
 	Tablesize        string `json:"tablesize"`
@@ -4634,11 +4674,14 @@ func inspection_report_table_make(inspection_report_id int, count_system_obj str
 	}
 
 	//获取该数据库的所有数据表
+
 	sql = `
 	SELECT
-		pg_namespace.nspname AS schemaname ,pg_class.relname AS tablename, 
-		COALESCE(pg_description.description,'') AS tablecomment,pg_authid.rolname AS tableowner,
-		COALESCE(pg_tablespace.spcname,'` + dattablespace + `') AS tablespace,pg_catalog.pg_table_size(pg_class.oid)::text AS relationsize,
+		pg_namespace.nspname AS schemaname ,pg_class.relname AS tablename,
+		CASE WHEN pg_class.relkind='r' THEN '数据表' ELSE '物化视图' END AS tabletype,COALESCE(pg_description.description,'') AS tablecomment, 
+		pg_authid.rolname AS tableowner,COALESCE(pg_tablespace.spcname,'` + dattablespace + `') AS tablespace,
+		pg_class.reltuples::bigint,pg_catalog.pg_table_size(pg_class.oid)::text AS relationsize,
+	    pg_class.relpages,CASE WHEN pg_class.reltuples>0 THEN pg_table_size(pg_class.oid)/pg_class.reltuples ELSE pg_table_size(pg_class.oid) END::bigint::text AS row_of_size,
 		COALESCE(indexnum.indexnum,0) AS indexnum,pg_catalog.pg_indexes_size(pg_class.oid)::text AS indexsize,
 		pg_catalog.pg_total_relation_size(pg_class.oid)::text AS tablesize,
 		COALESCE(pg_stat_all_tables.seq_scan,0) AS seq_scan, COALESCE(pg_stat_all_tables.seq_tup_read,0) AS seq_tup_read,
@@ -4672,7 +4715,7 @@ func inspection_report_table_make(inspection_report_id int, count_system_obj str
 		) AS indexnum ON indexnum.indrelid=pg_class.oid
 		LEFT OUTER JOIN pg_catalog.pg_stat_all_tables AS pg_stat_all_tables ON pg_stat_all_tables.relid=pg_class.oid
 	WHERE
-		pg_class.relkind='r'
+		pg_class.relkind IN ('r','m')
 		` + where + `
 	`
 	rows, err = nodeconn.Query(sql)
@@ -4686,14 +4729,17 @@ func inspection_report_table_make(inspection_report_id int, count_system_obj str
 	for rows.Next() {
 		err = rows.Scan(
 			&rec.Schemaname, &rec.Tablename,
-			&rec.Tablecomment, &rec.Tableowner,
-			&rec.Tablespace, &rec.Relationsize,
+			&rec.Tabletype, &rec.Tablecomment,
+			&rec.Tableowner, &rec.Tablespace,
+			&rec.Reltuples, &rec.Relationsize,
+			&rec.Relpages, &rec.Row_of_size,
 			&rec.Indexnum, &rec.Indexsize,
 			&rec.Tablesize,
 			&rec.Seq_scan, &rec.Seq_tup_read,
 			&rec.Idx_scan, &rec.Idx_tup_fetch,
 			&rec.Last_vacuum, &rec.Last_autovacuum,
 			&rec.Last_analyze, &rec.Last_autoanalyze)
+
 		if err != nil {
 			out.Stderr = error_msg + "提取数据失败－－详情：" + err.Error()
 			s <- out
@@ -4703,11 +4749,13 @@ func inspection_report_table_make(inspection_report_id int, count_system_obj str
 		sql = `
 	    INSERT INTO inspection_report_table
 	    (
-	        inspection_report_id,
-			datname,schemaname,
-			tablename,tablecomment,
+	        inspection_report_id,datname,
+			schemaname,tablename,
+			tabletype,tablecomment,
 			tableowner,tablespace,
-			rownum,relationsize,
+			reltuples,relationsize,
+			rownum,rownum_deviation,
+			relpages,row_of_size,
 			indexnum,indexsize,
 			tablesize,
 			seq_scan,seq_tup_read,
@@ -4717,25 +4765,28 @@ func inspection_report_table_make(inspection_report_id int, count_system_obj str
 	    )
 		VALUES
 		(
-			$1,
-			$2,$3,
-			$4,$5,
-			$6,$7,
-			NULL,$8,
+			$1,$2,
+			$3,$4,
+			$5,$6,
+			$7,$8,
 			$9,$10,
-			$11,
-			$12,$13,
-			$14,$15,
-			NULLIF($16,'')::TIMESTAMP,NULLIF($17,'')::TIMESTAMP,
-			NULLIF($18,'')::TIMESTAMP,NULLIF($19,'')::TIMESTAMP
+			NULL,NULL,					
+			$11,$12,
+			$13,$14,		
+			$15,
+			$16,$17,
+			$18,$19,
+			NULLIF($20,'')::TIMESTAMP,NULLIF($21,'')::TIMESTAMP,
+			NULLIF($22,'')::TIMESTAMP,NULLIF($23,'')::TIMESTAMP
 		) 
 	    `
 		_, err = conn.Exec(sql,
-			inspection_report_id,
-			row.Pg_database, rec.Schemaname,
-			rec.Tablename, rec.Tablecomment,
+			inspection_report_id, row.Pg_database,
+			rec.Schemaname, rec.Tablename,
+			rec.Tabletype, rec.Tablecomment,
 			rec.Tableowner, rec.Tablespace,
-			rec.Relationsize,
+			rec.Reltuples, rec.Relationsize,
+			rec.Relpages, rec.Row_of_size,
 			rec.Indexnum, rec.Indexsize,
 			rec.Tablesize,
 			rec.Seq_scan, rec.Seq_tup_read,
@@ -4762,6 +4813,7 @@ func inspection_report_table_make(inspection_report_id int, count_system_obj str
 
 参数说明：
 inspection_report_id   -- 巡检报告id号
+count_recordnum_processes --最大的并发数
 noderow -- 结构类型 Table_rownum_update_row
 
 返回值说明：无
@@ -4905,8 +4957,8 @@ func inspection_report_table_rownum_update_run(inspection_report_id int, row Tab
 	}
 	defer conn.Close()
 
-	sql = "UPDATE inspection_report_table SET rownum=$1 WHERE inspection_report_id=$2 AND schemaname=$3 AND tablename=$4"
-	_, err = conn.Exec(sql, num, inspection_report_id, row.Schemaname, row.Tablename)
+	sql = "UPDATE inspection_report_table SET rownum=$1,rownum_deviation=$1 - reltuples,row_of_size=CASE WHEN $1>0 THEN relationsize/$1 ELSE relationsize END::bigint WHERE inspection_report_id=$2 AND datname=$3 AND schemaname=$4 AND tablename=$5"
+	_, err = conn.Exec(sql, num, inspection_report_id, row.Pg_database, row.Schemaname, row.Tablename)
 
 	if err != nil {
 		out.Stderr = error_msg + "更新数据表出错,详情：" + err.Error()
@@ -5016,13 +5068,16 @@ func inspection_report_table_record(inspection_report_id int, sql_sort_limit str
 	}
 	defer conn.Close()
 
-	sql = `
+	sql = `	
     SELECT
 		id,
 		datname,schemaname,
-		tablename,tablecomment,
-		tableowner,tablespace,
-		COALESCE(rownum,0) AS rownum_show,pg_catalog.pg_size_pretty(relationsize) AS show_relationsize,
+		tablename,tabletype,
+		tablecomment,tableowner,
+		tablespace,reltuples,
+		COALESCE(rownum::text,'') AS rownum_show,COALESCE(rownum_deviation::text,'') AS rownum_deviation_show,
+		pg_catalog.pg_size_pretty(relationsize) AS show_relationsize,relpages,
+		pg_size_pretty(row_of_size) AS row_of_size_show,
 		indexnum,pg_catalog.pg_size_pretty(indexsize) AS show_indexsize,
 		pg_catalog.pg_size_pretty(tablesize) AS show_tablesize,
 		seq_scan,seq_tup_read,
@@ -5047,15 +5102,322 @@ func inspection_report_table_record(inspection_report_id int, sql_sort_limit str
 		err = rows.Scan(
 			&rec.Id,
 			&rec.Datname, &rec.Schemaname,
-			&rec.Tablename, &rec.Tablecomment,
-			&rec.Tableowner, &rec.Tablespace,
-			&rec.Rownum, &rec.Relationsize,
+			&rec.Tablename, &rec.Tabletype,
+			&rec.Tablecomment, &rec.Tableowner,
+			&rec.Tablespace, &rec.Reltuples,
+			&rec.Rownum, &rec.Rownum_deviation,
+			&rec.Relationsize, &rec.Relpages,
+			&rec.Row_of_size,
 			&rec.Indexnum, &rec.Indexsize,
 			&rec.Tablesize,
 			&rec.Seq_scan, &rec.Seq_tup_read,
 			&rec.Idx_scan, &rec.Idx_tup_fetch,
 			&rec.Last_vacuum, &rec.Last_autovacuum,
 			&rec.Last_analyze, &rec.Last_autoanalyze)
+		if err != nil {
+			data.Err = "提取数据失败－－详情：" + err.Error()
+			data_chan <- data
+			return
+		}
+		data.Rows = append(data.Rows, rec)
+		data.Total = data.Total + 1
+	}
+
+	data_chan <- data
+	return
+}
+
+/*
+功能描述：巡检报告－－外部表统计
+
+参数说明：
+inspection_report_id  -- 巡检报表－系统编号
+row －－ 节点资料
+
+返回值说明：
+s -- 通道返回一个Stdout_and_stderr结构体
+*/
+
+//定义外部表记录struct
+type Inspection_report_foreign_table struct {
+	Id           int    `json:"id"`
+	Datname      string `json:"datname"`
+	Schemaname   string `json:"schemaname"`
+	Tablename    string `json:"tablename"`
+	Srvname      string `json:"srvname"`
+	Srvoptions   string `json:"srvoptions"`
+	Ftoptions    string `json:"ftoptions"`
+	Tablecomment string `json:"tablecomment"`
+	Tableowner   string `json:"tableowner"`
+}
+
+//定义列表返回的struct
+type Inspection_report_foreign_tableData struct {
+	Total int                               `json:"total"`
+	Rows  []Inspection_report_foreign_table `json:"rows"`
+	Err   string                            `json:"err"`
+}
+
+func inspection_report_foreign_table_make(inspection_report_id int, row Row, s chan Stdout_and_stderr) {
+	var err error
+	var error_msg string
+	//定义返回的struct
+	var out Stdout_and_stderr
+	var rec Inspection_report_foreign_table
+	var sql string
+
+	out.Stdout = ""
+	out.Stderr = ""
+	error_msg = "外部表统计－－"
+
+	//连接pgcluster数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		out.Stderr = error_msg + "连接pgcluster数据库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//连接要统计的节点
+	var nodeconn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = row.Host
+	config.User = row.Pg_user
+	config.Password = row.Pg_password
+	config.Database = row.Pg_database
+	config.Port = row.Pg_port
+
+	nodeconn, err = pgx.Connect(config)
+	if err != nil {
+		out.Stderr = error_msg + "连接统计库失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer nodeconn.Close()
+
+	sql = `
+	SELECT
+	    pg_namespace.nspname AS schemaname,
+	    pg_class.relname AS tablename,
+	    pg_foreign_server.srvname AS srvname,
+	    pg_foreign_server.srvoptions::text AS srvoptions,
+	    pg_foreign_table.ftoptions::text AS ftoptions,
+	    COALESCE(pg_description.description,'') AS tablecomment,
+	    pg_authid.rolname AS tableowner
+	FROM
+	    pg_catalog.pg_foreign_table AS pg_foreign_table 
+	    INNER JOIN pg_catalog.pg_class AS pg_class ON pg_class.oid = pg_foreign_table.ftrelid
+	    INNER JOIN pg_catalog.pg_authid AS pg_authid ON pg_authid.oid=pg_class.relowner
+	    INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+	    INNER JOIN pg_catalog.pg_foreign_server AS pg_foreign_server ON pg_foreign_server.oid = pg_foreign_table.ftserver 
+	    LEFT OUTER JOIN pg_catalog.pg_description AS pg_description ON pg_description.objoid=pg_class.oid AND pg_description.objsubid=0
+	;
+	`
+	rows, err := nodeconn.Query(sql)
+	if err != nil {
+		out.Stderr = error_msg + "查询资料失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Schemaname, &rec.Tablename,
+			&rec.Srvname, &rec.Srvoptions,
+			&rec.Ftoptions, &rec.Tablecomment,
+			&rec.Tableowner)
+		if err != nil {
+			out.Stderr = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+
+		sql = `
+	    INSERT INTO inspection_report_foreign_table
+	    (
+	        inspection_report_id,datname,
+			schemaname,tablename, 
+			srvname,srvoptions,
+			ftoptions,tablecomment,
+			tableowner
+	    )
+		VALUES
+		(
+			$1,$2,
+			$3,$4,
+			$5,$6,
+			$7,$8,
+			$9
+		) 
+	    `
+		type Inspection_report_foreign_table struct {
+			Id           int    `json:"id"`
+			Schemaname   string `json:"schemaname"`
+			Tablename    string `json:"tablename"`
+			Srvname      string `json:"srvname"`
+			Srvoptions   string `json:"srvoptions"`
+			Ftoptions    string `json:"ftoptions"`
+			Tablecomment string `json:"tablecomment"`
+			Tableowner   string `json:"tableowner"`
+		}
+		_, err = conn.Exec(sql,
+			inspection_report_id, row.Pg_database,
+			rec.Schemaname, rec.Tablename,
+			rec.Srvname, rec.Srvoptions,
+			rec.Ftoptions, rec.Tablecomment,
+			rec.Tableowner)
+
+		if err != nil {
+			out.Stderr = error_msg + "插入数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+	}
+
+	out.Stdout = ""
+	out.Stderr = ""
+	s <- out
+	return
+}
+
+/*
+功能描述：巡检报告－－外部表列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func inspection_report_foreign_table_listHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	var err error
+	var sql string
+	remote_ip := get_remote_ip(r)
+	modlename := "inspection_report_foreign_table_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+
+	error_msg = "获取巡检报告－－获取外部表统计信息ID号为[" + r.FormValue("inspection_report_id") + "]－－"
+
+	//判断巡检报告inspection_report_id号合法性
+	inspection_report_id, err := strconv.Atoi(r.FormValue("inspection_report_id"))
+	if err != nil {
+		error_msg = error_msg + "巡检报告id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//异步获取数据
+	data_chan := make(chan Inspection_report_foreign_tableData)
+	go inspection_report_foreign_table_record(inspection_report_id, sql_sort_limit(r), data_chan)
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM inspection_report_foreign_table WHERE inspection_report_id=" + fmt.Sprintf("%d", inspection_report_id)
+	total_chan := make(chan Totalnum)
+	go gettotalnum(sql, total_chan)
+
+	//返回异步获取数据结果
+	data := <-data_chan
+	if data.Err != "" {
+		error_msg = error_msg + data.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + total.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：获取巡检报告－－外部表统计信息
+
+参数说明：
+inspection_report_id   -- 巡检报告的id号
+sql_sort_limit         -- 需要分页sql语句
+
+返回值说明：
+data_chan -- chan Inspection_report_foreign_tableData
+*/
+
+func inspection_report_foreign_table_record(inspection_report_id int, sql_sort_limit string, data_chan chan Inspection_report_foreign_tableData) {
+	var err error
+	var sql string
+	var rec Inspection_report_foreign_table
+	var data Inspection_report_foreign_tableData = Inspection_report_foreign_tableData{}
+	data.Rows = make([]Inspection_report_foreign_table, 0)
+	data.Total = 0
+	data.Err = ""
+
+	//连接数据库
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(extractConfig())
+	if err != nil {
+		data.Err = "连接数据库失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer conn.Close()
+
+	sql = `
+    SELECT
+		id,datname,
+		schemaname,tablename,
+		srvname,srvoptions,
+		ftoptions,tablecomment,
+		tableowner
+	FROM 
+		inspection_report_foreign_table
+	WHERE
+		inspection_report_id=$1
+    ` + sql_sort_limit
+
+	rows, err := conn.Query(sql, inspection_report_id)
+	if err != nil {
+		data.Err = "查询资料失败－－详情：" + err.Error()
+		data_chan <- data
+		return
+	}
+	defer rows.Close()
+
+	//定义外部表记录struct
+	type Inspection_report_foreign_table struct {
+		Id           int    `json:"id"`
+		Datname      string `json:"datname"`
+		Schemaname   string `json:"schemaname"`
+		Tablename    string `json:"tablename"`
+		Srvname      string `json:"srvname"`
+		Srvoptions   string `json:"srvoptions"`
+		Ftoptions    string `json:"ftoptions"`
+		Tablecomment string `json:"tablecomment"`
+		Tableowner   string `json:"tableowner"`
+	}
+	for rows.Next() {
+		err = rows.Scan(
+			&rec.Id, &rec.Datname,
+			&rec.Schemaname, &rec.Tablename,
+			&rec.Srvname, &rec.Srvoptions,
+			&rec.Ftoptions, &rec.Tablecomment,
+			&rec.Tableowner)
 		if err != nil {
 			data.Err = "提取数据失败－－详情：" + err.Error()
 			data_chan <- data
@@ -5552,6 +5914,7 @@ func inspection_report_delete(inspection_report_id int, s chan Stdout_and_stderr
 	DELETE FROM inspection_report_role WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
 	DELETE FROM inspection_report_database WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
 	DELETE FROM inspection_report_table WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
+	DELETE FROM inspection_report_foreign_table WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
 	DELETE FROM inspection_report_index WHERE inspection_report_id=` + fmt.Sprintf("%d", inspection_report_id) + `;
 	`
 	_, err = conn.Exec(sql)
@@ -5617,6 +5980,10 @@ func inspection_report_exportHandler(w http.ResponseWriter, r *http.Request) {
 	//异步获取数据表统计数据
 	table_chan := make(chan Inspection_report_tableData)
 	go inspection_report_table_record(inspection_report_id, "", table_chan)
+
+	//异步获取外部表统计数据
+	foreign_table_chan := make(chan Inspection_report_foreign_tableData)
+	go inspection_report_foreign_table_record(inspection_report_id, "", foreign_table_chan)
 
 	//异步获取索引统计数据
 	index_chan := make(chan Inspection_report_indexData)
@@ -5797,7 +6164,7 @@ func inspection_report_exportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//写入标题
-	title = []string{"ID号", "数据库名称", "所属模式", "表名", "注释", "所有者", "存储表空间", "记录数", "表文件占用空间", "索引数", "索引文件占用空间", "表相关文件占用空间", "顺序扫描次数", "顺序扫描取得行数", "索引扫描次数", "索引扫描取得行数", "手动清理时间", "自动清理时间", "手动分析时间", "自动分析时间"}
+	title = []string{"ID号", "数据库名称", "所属模式", "表名", "表类型", "注释", "所有者", "存储表空间", "记录数（估值）", "记录数", "记录数偏差", "表文件占用空间", "占用盘页（估值）", "每行占用空间", "索引数", "索引文件占用空间", "表相关文件占用空间", "顺序扫描次数", "顺序扫描取得行数", "索引扫描次数", "索引扫描取得行数", "手动清理时间", "自动清理时间", "手动分析时间", "自动分析时间"}
 	row = sheet.AddRow()
 	for _, v := range title {
 		cell = row.AddCell()
@@ -5814,6 +6181,41 @@ func inspection_report_exportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, v := range data_table.Rows {
+		rec := reflect.ValueOf(v)
+		row = sheet.AddRow()
+		for k, _ := range title {
+			cell = row.AddCell()
+			cell.SetValue(rec.Field(k).Interface())
+			cell.SetStyle(contentstyle)
+		}
+	}
+
+	//写入外部表统计值
+	sheet, err = file.AddSheet("外部表")
+	if err != nil {
+		error_msg = error_msg + "增加“外部表”Sheet出错－－详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	//写入标题
+	title = []string{"ID号", "数据库名称", "所属模式", "表名", "外部服务器名称", "外部服务器配置", "外部表名称", "注释", "所有者"}
+	row = sheet.AddRow()
+	for _, v := range title {
+		cell = row.AddCell()
+		cell.Value = v
+		cell.SetStyle(titlestyle)
+	}
+
+	//获取外部表统计数据
+	data_foreign_table := <-foreign_table_chan
+	if data_foreign_table.Err != "" {
+		error_msg = error_msg + data_foreign_table.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	for _, v := range data_foreign_table.Rows {
 		rec := reflect.ValueOf(v)
 		row = sheet.AddRow()
 		for k, _ := range title {
@@ -6645,31 +7047,31 @@ key -- postgres用户的私钥证书,证书类型可以是“DSA”或“RSA”
 
 func get_postgres_private_key() (key string) {
 	postgres_private_key := `-----BEGIN RSA PRIVATE KEY-----
-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
+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
 -----END RSA PRIVATE KEY-----`
 	return postgres_private_key
 }
@@ -6685,31 +7087,31 @@ key -- root用户的私钥证书,证书类型可以是“DSA”或“RSA”
 
 func get_root_private_key() (key string) {
 	root_private_key := `-----BEGIN RSA PRIVATE KEY-----
-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
+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
 -----END RSA PRIVATE KEY-----`
 	return root_private_key
 }
