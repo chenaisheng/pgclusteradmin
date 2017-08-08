@@ -69,7 +69,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 －－postgresql.conf配置
 
     listen_addresses = '*'
-    log_destination = 'stderr'
+    log_destination = 'csvlog'
     logging_collector = on
 
 －－pg_hba.conf配置
@@ -275,10 +275,21 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 #### 巡检报告table
 ![](gui_image/巡检报告table.png)
 
+#### 巡检报告foreign table
+![](gui_image/巡检报告foreign_table.png)
+
 #### 巡检报告index
 ![](gui_image/巡检报告index.png)
     
 ### 六、更新日志
+
+#### 2017-8-8
+
+* 1、巡检报告增加“外部表”统计指标
+* 2、巡检报告“表数据”增加“记录数估值（reltuples）”,“记录偏差”count记录数－reltuples，占用盘页估值（relpages），每行占用存储空间，pg_table_size()/count记录数或者reltuples
+* 3、导出巡检报表也做了相应的调整
+* 4、修正inspection_report_table_rownum_update_run函数中不同库，同模式，同表名统计记录数的bug
+* 5、修正inspection_report_state_make函数中统计节点占用空间时null值存入出错问题
 
 #### 2017-6-19
 
@@ -364,6 +375,12 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 * 4、修正 index.html中前端删除节点资料后,在没刷新的情况下无法执行主备切换功能。
 * 5、修正 index.html中前端主备切换判断主备节点类型不正确的bug。
 * 6、修正 get_node_ip_bind_status接口中执行ip a命令ip找不到的错误 。  
+
+### 接下来开发计划
+
+* 1、进程统计监控及管理
+* 2、Pg_stat_statement数据可视化统计
+* 3、锁的监控及管理
 
 ### 联系我们      
 

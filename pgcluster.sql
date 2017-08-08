@@ -255,11 +255,16 @@ CREATE TABLE inspection_report_table
 	datname text not null,
 	schemaname text not null,
 	tablename text not null,
+	tabletype text not null,
 	tablecomment text not null,
 	tableowner text not null,
-	tablespace text not null,
-	rownum bigint ,
+	tablespace text not null,	
+	reltuples bigint not null,
+	rownum bigint ,	
+	rownum_deviation bigint,	
 	relationsize bigint not null default 0,
+	relpages bigint not null default 0,
+	row_of_size bigint not null default 0,
 	indexnum int not null default 0,
 	indexsize bigint not null,
 	tablesize bigint not null,
@@ -278,11 +283,16 @@ COMMENT ON COLUMN inspection_report_table.inspection_report_id IS '巡检报表�
 COMMENT ON COLUMN inspection_report_table.datname IS '所属数据库';
 COMMENT ON COLUMN inspection_report_table.schemaname IS '所属模式';
 COMMENT ON COLUMN inspection_report_table.tablename IS '表名';
+COMMENT ON COLUMN inspection_report_table.tabletype IS '表类型';
 COMMENT ON COLUMN inspection_report_table.tablecomment IS '注释';
 COMMENT ON COLUMN inspection_report_table.tableowner IS '所有者';
 COMMENT ON COLUMN inspection_report_table.tablespace IS '存储表空间';
+COMMENT ON COLUMN inspection_report_table.reltuples IS '记录数（估值）';
 COMMENT ON COLUMN inspection_report_table.rownum IS '记录数';
+COMMENT ON COLUMN inspection_report_table.rownum_deviation IS '记录数差异';
 COMMENT ON COLUMN inspection_report_table.relationsize IS '表文件占用空间';
+COMMENT ON COLUMN inspection_report_table.relpages IS '占用盘页（估值）';
+COMMENT ON COLUMN inspection_report_table.row_of_size IS '每行占用空间';
 COMMENT ON COLUMN inspection_report_table.indexnum IS '索引数';
 COMMENT ON COLUMN inspection_report_table.indexsize IS '索引文件占用空间';
 COMMENT ON COLUMN inspection_report_table.tablesize IS '表相关文件占用空间';
@@ -348,6 +358,34 @@ COMMENT ON COLUMN inspection_report_state.subject IS '项目名称';
 COMMENT ON COLUMN inspection_report_state.val IS '统计值';
 
 CREATE INDEX inspection_report_state_inspection_report_id_idx ON inspection_report_state USING BTREE(inspection_report_id);
+
+CREATE TABLE inspection_report_foreign_table
+(
+	id serial not null unique,
+	inspection_report_id integer not null,
+	datname text not null,
+	schemaname text not null,
+	tablename text not null,
+	srvname text not null,
+	srvoptions text not null,
+	ftoptions text not null,
+	tablecomment text not null,
+	tableowner text not null
+);
+
+COMMENT ON TABLE inspection_report_foreign_table IS '巡检报表--外部表统计';
+COMMENT ON COLUMN inspection_report_foreign_table.id IS '系统编号';
+COMMENT ON COLUMN inspection_report_foreign_table.inspection_report_id IS '巡检报表－系统编号';
+COMMENT ON COLUMN inspection_report_foreign_table.datname IS '所属数据库';
+COMMENT ON COLUMN inspection_report_foreign_table.schemaname IS '所属模式';
+COMMENT ON COLUMN inspection_report_foreign_table.tablename IS '表名';
+COMMENT ON COLUMN inspection_report_foreign_table.srvname IS '外部服务器名称';
+COMMENT ON COLUMN inspection_report_foreign_table.srvoptions IS '外部服务器配置';
+COMMENT ON COLUMN inspection_report_foreign_table.ftoptions IS '外部表名称';
+COMMENT ON COLUMN inspection_report_foreign_table.tablecomment IS '注释';
+COMMENT ON COLUMN inspection_report_foreign_table.tableowner IS '所有者';
+
+CREATE INDEX inspection_report_foreign_table_inspection_report_id_idx ON inspection_report_foreign_table USING BTREE(inspection_report_id);
 
 COMMENT ON DATABASE pgcluster IS 'postgresql集群管理器';		
 
