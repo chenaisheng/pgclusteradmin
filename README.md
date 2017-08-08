@@ -287,9 +287,10 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 * 1、巡检报告增加“外部表”统计指标
 * 2、巡检报告“表数据”增加“记录数估值（reltuples）”,“记录偏差”count记录数－reltuples，占用盘页估值（relpages），每行占用存储空间，pg_table_size()/count记录数或者reltuples
-* 3、导出巡检报表也做了相应的调整
-* 4、修正inspection_report_table_rownum_update_run函数中不同库，同模式，同表名统计记录数的bug
-* 5、修正inspection_report_state_make函数中统计节点占用空间时null值存入出错问题
+* 3、原来的“表数据”统计项目中合并“物化视图”这个对象的统计。
+* 4、导出巡检报表也做了相应的调整
+* 5、修正inspection_report_table_rownum_update_run函数中不同库，同模式，同表名统计记录数的bug
+* 6、修正inspection_report_state_make函数中统计节点占用空间时null值存入出错问题
 
 #### 2017-6-19
 
