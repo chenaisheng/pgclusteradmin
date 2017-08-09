@@ -1,0 +1,87 @@
+#!/bin/bash
+#chkconfig:2345 90 10
+#description:pgclusteradmin
+
+#pgclusteradmin安装路径
+BASEDIR=/usr/local/pgclusteradmin
+
+#程序名称
+BINARY_NAME=pgclusteradmin
+
+#日志文件名称
+LOGFILE_NAME=pgclusteradmin.log.txt
+
+#程序全路径 
+FULLPATH=$BASEDIR/$BINARY_NAME 
+
+#日志全路径 
+FULLLOGPATH=$BASEDIR/$LOGFILE_NAME 
+
+#$BINRUN=`ps -e | grep $BINARY_NAME | awk '{print $4}'`
+
+pidof $BINARY_NAME > /dev/null
+
+if [[ $? -eq 0 ]]; then
+    STATUS="$BINARY_NAME (pid `pidof $BINARY_NAME`) already running.."
+    RUNNING=1
+else
+    STATUS="$BINARY_NAME is not running.."
+    RUNNING=0
+fi
+
+# start函数
+start() {
+if [ $RUNNING -eq 1 ]; then    
+    echo $STATUS
+else
+    echo "Starting $BINARY_NAME" 
+    cd $BASEDIR
+    $FULLPATH >> $FULLLOGPATH 2>&1 &
+fi
+}
+
+#stop函数
+stop() {
+if [ $RUNNING -eq 0 ]; then
+    echo $STATUS
+else
+    echo "Stoping $BINARY_NAME " 
+    /usr/bin/killall $FULLPATH     
+    RUNNING=0
+fi  
+} 
+
+#status 函数
+status() {
+    echo $STATUS
+}
+
+
+# 执行
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;    
+    status)
+        status $BINARY_NAME
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    help|*)
+        echo $"Usage: $0 {start|stop|status|restart|help}"
+        cat <<EOF
+            start  - start $BINARY_NAME
+            stop  - stop $BINARY_NAME
+            status  - show current status of $BINARY_NAME
+            restart  - restart $BINARY_NAME if running by sending a SIGHUP or start if not running
+            help  - this screen 
+EOF
+        exit 1
+        ;;
+esac  
+exit 0

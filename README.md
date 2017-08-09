@@ -233,6 +233,44 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 #### 访问pgclusteradmin
 
     打开一个浏览器，输入 http://192.168.1.10:10001即可进入管理器，192.168.1.10换成你自己ip地址即可。初始化的用户名和密码都是"admin"
+	
+#### 注册pgclusteradmin做为一个服务（线上部署使用，测试的话可以漂过）
+
+	1、编译pgclusteradmin.go程序为可执行程序
+	[root@ad pgclusteradmin]# go build pgclusteradmin.go
+	
+	2、复制pgclusteradmin程序及easyui目录至/usr/local/pgclusteradmin目录下
+	[root@ad pgclusteradmin]# mkdir /usr/local/pgclusteradmin
+	[root@ad pgclusteradmin]# cp pgclusteradmin easyui/ /usr/local/pgclusteradmin -rf
+		
+	3、复制服务管理脚本至目录至/etc/init.d目录下
+	[root@ad pgclusteradmin]# cp ./etc/init.d/pgclusteradmin /etc/init.d/pgclusteradmin 
+	[root@ad pgclusteradmin]# chmod +x /etc/init.d/pgclusteradmin 
+	
+	4、配置pgclusteradmin为服务
+	[root@ad pgclusteradmin]# chkconfig --add pgclusteradmin 
+	[root@ad pgclusteradmin]# chkconfig --list | grep pgclusteradmin 
+	pgclusteradmin  0:关闭  1:关闭  2:启用  3:启用  4:启用  5:启用  6:关闭
+	
+	5、测试pgclusteradmin服务使用
+	[root@ad pgclusteradmin]# service pgclusteradmin start
+	Starting pgclusteradmin
+	[root@ad pgclusteradmin]# service pgclusteradmin status
+	pgclusteradmin (pid 15686) already running..
+	[root@ad pgclusteradmin]# service pgclusteradmin restart
+	Stoping pgclusteradmin 
+	Starting pgclusteradmin
+	[root@nfs pgclusteradmin]# service pgclusteradmin status 
+	pgclusteradmin (pid 15717) already running..
+	[root@ad pgclusteradmin]# service pgclusteradmin help
+	Usage: /etc/init.d/pgclusteradmin {start|stop|status|restart|help}
+	            start  - start pgclusteradmin
+	            stop  - stop pgclusteradmin
+	            status  - show current status of pgclusteradmin
+	            restart  - restart pgclusteradmin if running by sending a SIGHUP or start if not running
+	            help  - this screen 
+	[root@ad pgclusteradmin]# 
+		
 
 ### 五、界面图 
 
