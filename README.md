@@ -1,6 +1,6 @@
 # pgclusteradmin
 
-Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主要功能有“节点资料集中管理”、“运行参数在线配置，参数文件多版本管理，参数文件模板管理”、“服务管理（即服务start,stop,restart,stop）”、“VIP绑定解绑”、“备机唤醒”、“主备切换”、“巡检报告”；系统支持多用户，操作认证，支持SSH密码登陆和SSH公钥、私钥登陆；操作人员通过浏览器从远程登录进入管理平台，前面的界面使用EasyUI实现。
+Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主要功能有“节点资料集中管理”、“运行参数在线配置，参数文件多版本管理，参数文件模板管理”、“服务管理（即服务start,stop,restart,stop）”、“VIP绑定解绑”、“备机唤醒”、“主备切换”、“巡检报告”、“进程管理”、“表锁管理”、“查询统计”；系统支持多用户，操作认证，支持SSH密码登陆和SSH公钥、私钥登陆；操作人员通过浏览器从远程登录进入管理平台，前面的界面使用EasyUI实现。
 
 ### 一、功能列表
 
@@ -11,11 +11,14 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 * 备机唤醒管理。
 * 主备节点一键切换。
 * 巡检报告生成及导出。
+* 管理工具－－进程管理
+* 管理工具－－表锁管理
+* 管理工具－－查询统计
 
 ### 二、部署环境
 
-* Ip：192.168.1.10
-* os：centos 7.0 
+* Ip：192.168.0.231
+* os：centos 6.9 
 * golang: go version go1.8.3 linux/amd64
 * Postgresql：9.6.1 
 
@@ -123,7 +126,18 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 －－postgresql操作支持包
 
-    [root@ad astaxie]# cd /usr/local/go/src/github.com/
+	[root@ad pgclusteradmin]#  cd /usr/local/go/src/github.com/
+	[root@ad github.com]# mkdir pkg
+	[root@ad github.com]# cd pkg
+	[root@ad pkg]# git clone https://github.com/pkg/errors
+	Initialized empty Git repository in /usr/local/go1.8.3/src/github.com/pkg/errors/.git/
+	remote: Counting objects: 418, done.
+	remote: Total 418 (delta 0), reused 0 (delta 0), pack-reused 418
+	Receiving objects: 100% (418/418), 86.42 KiB, done.
+	Resolving deltas: 100% (253/253), done.
+	[root@ad pkg]# 
+	
+    [root@ad pkg]# cd /usr/local/go/src/github.com/
     [root@ad github.com]# mkdir jackc
     [root@ad github.com]# cd jackc
     [root@ad jackc]# git clone https://github.com/jackc/pgx
@@ -232,7 +246,7 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 #### 访问pgclusteradmin
 
-    打开一个浏览器，输入 http://192.168.1.10:10001即可进入管理器，192.168.1.10换成你自己ip地址即可。初始化的用户名和密码都是"admin"
+    打开一个浏览器，输入 http://192.168.0.231:10001即可进入管理器，192.168.0.231换成你自己ip地址即可。初始化的用户名和密码都是"admin"
 	
 #### 注册pgclusteradmin做为一个服务（线上部署使用，测试的话可以漂过）
 
@@ -318,23 +332,39 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 #### 巡检报告index
 ![](gui_image/巡检报告index.png)
+
+#### 管理工具－－进程管理
+![](gui_image/管理工具－－进程管理.png)
+
+#### 管理工具－－表锁管理
+![](gui_image/管理工具－－表锁管理.png)
+
+#### 管理工具－－查询统计
+![](gui_image/管理工具－－查询统计.png)
     
 ### 六、更新日志
 
+#### 2017-8-16
+
+* 1、编写pgclusteradmin服务管理脚本，存放于源码包etc/init.d目录下,名称为pgclusteradmin,是一个shell脚本。
+* 2、增加管理工具－－进程管理，用于管理postgresql用户连接进程，支持在线“取消查询”和“杀死进程”。
+* 3、增加管理工具－－表锁管理，用于管理postgresql各种受阻塞锁监控管理，支持在线“取消查询”和“杀死进程”，感谢“德哥”提供了9.5之前pg锁的监控方法。
+* 4、增加管理工具－－查询统计，用于对pg_stat_statements数据进行可视化统计，需要pg_stat_statements模块支持。
+
 #### 2017-8-8
 
-* 1、巡检报告增加“外部表”统计指标
-* 2、巡检报告“表数据”增加“记录数估值（reltuples）”,“记录偏差”count记录数－reltuples，占用盘页估值（relpages），每行占用存储空间，pg_table_size()/count记录数或者reltuples
+* 1、巡检报告增加“外部表”统计指标。
+* 2、巡检报告“表数据”增加“记录数估值（reltuples）”,“记录偏差”count记录数－reltuples，占用盘页估值（relpages），每行占用存储空间，pg_table_size()/count记录数或者reltuples。
 * 3、原来的“表数据”统计项目中合并“物化视图”这个对象的统计。
-* 4、导出巡检报表也做了相应的调整
-* 5、修正inspection_report_table_rownum_update_run函数中不同库，同模式，同表名统计记录数的bug
-* 6、修正inspection_report_state_make函数中统计节点占用空间时null值存入出错问题
+* 4、导出巡检报表也做了相应的调整。
+* 5、修正inspection_report_table_rownum_update_run函数中不同库，同模式，同表名统计记录数的bug。
+* 6、修正inspection_report_state_make函数中统计节点占用空间时null值存入出错问题。
 
 #### 2017-6-19
 
-* 1、修正函数ssh_connect中ssh时ssh: must specify HostKeyCallback报错问题
-* 2、修正str_is_ip函数ip地址判断BUG
-* 3、修正get_node_ip_bind_status函数在一些centos下执行存在的问题解决办法
+* 1、修正函数ssh_connect中ssh时ssh: must specify HostKeyCallback报错问题。
+* 2、修正str_is_ip函数ip地址判断BUG。
+* 3、修正get_node_ip_bind_status函数在一些centos下执行存在的问题解决办法。
 
 #### 2017-5-23
 
@@ -342,27 +372,27 @@ Pgclusteradmin是一款基于Go开发的PostgreSQL集群管理工具，当前主
 
 #### 2017-5-05
 
-* 1、增加了“巡检报告”主模块
+* 1、增加了“巡检报告”主模块。
 
 #### 2017-4-16
 
-* 1、修改接口“getnode_type_and_status”存在的一个bug
+* 1、修改接口“getnode_type_and_status”存在的一个bug。
 
 #### 2017-4-12
 
-* 1、所有涉及到ssh登录的接口或函数增加公钥、私钥认证方法
+* 1、所有涉及到ssh登录的接口或函数增加公钥、私钥认证方法。
 
 #### 2017-4-4
 
-* 1、增加参数配置多版本管理及参数模板文件管理
+* 1、增加参数配置多版本管理及参数模板文件管理。
 
 #### 2017-3-28
 
-* 1、修复了ssh连接资源无法释放，造成内存泄漏的问题
+* 1、修复了ssh连接资源无法释放，造成内存泄漏的问题。
 
 #### 2017-3-23
 
-* 1、修正了接口“parameter_saveHandler”变量modlename付值错误的bug
+* 1、修正了接口“parameter_saveHandler”变量modlename付值错误的bug。
 
 #### 2017-3-22
 

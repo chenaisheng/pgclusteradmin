@@ -118,6 +118,24 @@
 .icon-export{
  background:url('icons/export.png') no-repeat center center;
 }
+.icon-tools{
+ background:url('icons/tools.png') no-repeat center center;
+}
+.icon-process{
+ background:url('icons/process.png') no-repeat center center;
+}
+.icon-unlock{
+ background:url('icons/unlock.png') no-repeat center center;
+}
+.icon-count{
+ background:url('icons/count.png') no-repeat center center;
+}
+.icon-killprocess{
+ background:url('icons/killprocess.png') no-repeat center center;
+}
+.icon-cancelquery{
+ background:url('icons/cancelquery.png') no-repeat center center;
+}
 
 .icon-mini-add{
 	background:url('icons/mini_add.png') no-repeat center center;

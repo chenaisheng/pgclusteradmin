@@ -185,6 +185,29 @@ func main() {
 	//获取数据库列表
 	http.HandleFunc("/get_database_list/", get_database_listHandler)
 
+	//管理工具－－进程管理－－获取某个数据库或所有数据库的进程列表
+	http.HandleFunc("/processadmin_process_list/", processadmin_process_listHandler)
+	//管理工具－－进程管理－－取消查询
+	http.HandleFunc("/processadmin_cancelquery/", processadmin_cancelqueryHandler)
+	//管理工具－－进程管理－－杀死进程
+	http.HandleFunc("/processadmin_killprocess/", processadmin_killprocessHandler)
+
+	//管理工具－－表锁管理－－获取某个数据库或所有数据库的受阻塞锁列表
+	http.HandleFunc("/lockadmin_lock_list/", lockadmin_lock_listHandler)
+	//管理工具－－表锁管理－－获取阻塞某个进程的锁列表
+	http.HandleFunc("/lockadmin_cloglock_list/", lockadmin_cloglock_listHandler)
+	//管理工具－－表锁管理－－取消查询
+	http.HandleFunc("/lockadmin_cancelquery/", lockadmin_cancelqueryHandler)
+	//管理工具－－表锁管理－－杀死进程
+	http.HandleFunc("/lockadmin_killprocess/", lockadmin_killprocessHandler)
+
+	//管理工具－－查询统计－－获取某个数据库或所有数据库的查询统计列表
+	http.HandleFunc("/querycount_record_list/", querycount_record_listHandler)
+	//管理工具－－查询统计－－检测节点是否加载了pg_stat_statments模块
+	http.HandleFunc("/querycount_pg_stat_statments_load_check/", querycount_pg_stat_statments_load_checkHandler)
+	//管理工具－－查询统计－－查询重新统计
+	http.HandleFunc("/querycount_dialog_countreset/", querycount_dialog_countresetHandler)
+
 	http.ListenAndServe(":10001", nil)
 
 }
@@ -6367,6 +6390,71 @@ func gettotalnum(sql string, s chan Totalnum) {
 }
 
 /*
+功能描述：获取某个节点某个查询得到的记录数
+
+参数说明：
+sql -- 要执行的sql语句
+s   -- chan Totalnum
+
+返回值说明：
+Totalnum结构
+*/
+
+func getnode_totalnum(nodeid int, sql string, s chan Totalnum) {
+	//定义返回的struct
+	var err error
+	var error_msg string
+	var out Totalnum
+	out.Total = 0
+	out.Err = ""
+	error_msg = "获取某个查询得到的记录数－－"
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(nodeid, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		out.Err = error_msg + "获取节点资料失败,详情：" + noderow.Return_msg
+		s <- out
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		out.Err = error_msg + "连接数据库失败，详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer conn.Close()
+
+	//统计总记录数
+	rows, err := conn.Query(sql)
+	if err != nil {
+		out.Err = error_msg + "执行查询失败－－详情：" + err.Error()
+		s <- out
+		return
+	}
+	defer rows.Close()
+	if rows.Next() {
+		err = rows.Scan(&out.Total)
+		if err != nil {
+			out.Err = error_msg + "提取数据失败－－详情：" + err.Error()
+			s <- out
+			return
+		}
+	}
+	s <- out
+	return
+}
+
+/*
 功能描述：获取某个节点ip绑定情况
 
 参数说明：
@@ -6555,15 +6643,24 @@ func get_database_listHandler(w http.ResponseWriter, r *http.Request) {
 
 	sql = `
 	SELECT
-		pg_database.datname,pg_database.datname||'－－'||coalesce(pg_shdescription.description,'') AS dattext
+		pg_database.datname,pg_database.datname||case when pg_shdescription.description IS not null then '－－'||pg_shdescription.description else '' end AS dattext
 	FROM
 		pg_catalog.pg_database AS pg_database 
 		LEFT OUTER JOIN pg_catalog.pg_shdescription AS pg_shdescription ON pg_shdescription.objoid=pg_database.oid
+	WHERE
+	    pg_database.datallowconn
 	ORDER BY
 		pg_database.datname
 	`
 	rows, err = conn.Query(sql)
 	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
 
 	var Rows []List
 	Rows = make([]List, 0)
@@ -6581,6 +6678,1297 @@ func get_database_listHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	ret, _ := json.Marshal(Rows)
 	w.Write(ret)
+}
+
+/*
+功能描述：管理工具－－进程管理－－获取某个数据库或所有数据库的进程列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func processadmin_process_listHandler(w http.ResponseWriter, r *http.Request) {
+	//节点行信息json结构
+	type List struct {
+		Pid                    int64  `json:"pid"`
+		Datname                string `json:"datname"`
+		Client_addr            string `json:"client_addr"`
+		Usename                string `json:"usename"`
+		Application_name       string `json:"application_name"`
+		Backend_start          string `json:"backend_start"`
+		Backend_continued_time string `json:"backend_continued_time"`
+		Xact_start             string `json:"xact_start"`
+		Xact_continued_time    string `json:"xact_continued_time"`
+		Query_start            string `json:"query_start"`
+		Query_continued_time   string `json:"query_continued_time"`
+		Wait_event_type        string `json:"wait_event_type"`
+		Wait_event             string `json:"wait_event"`
+		State                  string `json:"state"`
+		Backend_xid            string `json:"backend_xid"`
+		Query                  string `json:"query"`
+	}
+
+	//定义列表返回的struct
+	type ListData struct {
+		Total int    `json:"total"`
+		Rows  []List `json:"rows"`
+	}
+
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "processadmin_process_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－进程管理－－获取某个数据库或所有数据库的进程列表－－节点ID号为[" + r.FormValue("id") + "]－－数据库datname为[" + r.FormValue("datname") + "]－－"
+
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		error_msg = error_msg + "获取节点资料失败－－详情：" + noderow.Return_msg
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	where := ""
+	if r.FormValue("datname") != "" {
+		where = " WHERE pg_stat_activity.datname='" + sql_data_encode(r.FormValue("datname")) + "' "
+	}
+
+	sql = `
+	SELECT
+		pg_stat_activity.pid::bigint,
+		pg_stat_activity.datname,
+		pg_stat_activity.client_addr::text,
+		pg_stat_activity.usename,
+		pg_stat_activity.application_name,
+		pg_stat_activity.backend_start::timestamp(0)::text,
+		(now()::timestamp(0)-pg_stat_activity.backend_start::timestamp(0))::text AS backend_continued_time,
+		COALESCE(pg_stat_activity.xact_start::timestamp(0)::text,'') AS xact_start,
+		COALESCE((now()::timestamp(0)-pg_stat_activity.xact_start::timestamp(0))::text,'') AS xact_continued_time,
+		COALESCE(pg_stat_activity.query_start::timestamp(0)::text,'') AS query_start,
+		COALESCE((now()::timestamp(0)-pg_stat_activity.query_start::timestamp(0))::text,'') AS query_continued_time,
+		COALESCE(pg_stat_activity.wait_event_type,'') AS wait_event_type ,
+		COALESCE(pg_stat_activity.wait_event,'') AS wait_event,
+		pg_stat_activity.state,
+		COALESCE(pg_stat_activity.backend_xid::text,'') AS backend_xid,
+		pg_stat_activity.query
+	FROM
+		pg_catalog.pg_stat_activity AS pg_stat_activity 
+	` + where + sql_sort_limit(r)
+
+	rows, err = conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	var data ListData = ListData{}
+	data.Rows = make([]List, 0)
+	data.Total = 0
+
+	for rows.Next() {
+		var row List
+		err = rows.Scan(
+			&row.Pid,
+			&row.Datname,
+			&row.Client_addr,
+			&row.Usename,
+			&row.Application_name,
+			&row.Backend_start,
+			&row.Backend_continued_time,
+			&row.Xact_start,
+			&row.Xact_continued_time,
+			&row.Query_start,
+			&row.Query_continued_time,
+			&row.Wait_event_type,
+			&row.Wait_event,
+			&row.State,
+			&row.Backend_xid,
+			&row.Query)
+		if err != nil {
+			error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		data.Rows = append(data.Rows, row)
+	}
+	data.Total = len(data.Rows)
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：管理工具－－进程管理－－取消查询
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func processadmin_cancelqueryHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "processadmin_cancelqueryHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－进程管理－－取消查询－－节点ID号为[" + r.FormValue("id") + "]－－要取消查询的pid为[" + r.FormValue("pid") + "]－－"
+
+	ret_code, ret_result := precess_cancelquery(r.FormValue("id"), r.FormValue("pid"))
+	if ret_code == "FAIL" {
+		error_msg = error_msg + ret_result
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	} else {
+		logcontent := error_msg + ret_result
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
+		return
+	}
+}
+
+/*
+功能描述：管理工具－－进程管理－－杀死进程
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func processadmin_killprocessHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "processadmin_killprocessHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－进程管理－－杀死进程－－节点ID号为[" + r.FormValue("id") + "]－－要杀死的pid为[" + r.FormValue("pid") + "]－－"
+
+	ret_code, ret_result := precess_killprecess(r.FormValue("id"), r.FormValue("pid"))
+	if ret_code == "FAIL" {
+		error_msg = error_msg + ret_result
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	} else {
+		logcontent := error_msg + ret_result
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
+		return
+	}
+}
+
+/*
+功能描述：管理工具－－进程管理－－获取某个数据库或所有数据库的受阻塞锁列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func lockadmin_lock_listHandler(w http.ResponseWriter, r *http.Request) {
+	//节点行信息json结构
+	type List struct {
+		Locktype               string `json:"locktype"`
+		Pid                    int64  `json:"pid"`
+		Mode                   string `json:"mode"`
+		Mode_level             int32  `json:"mode_level"`
+		Granted                string `json:"granted"`
+		Datname                string `json:"datname"`
+		Nspname                string `json:"nspname"`
+		Relname                string `json:"relname"`
+		Relkind                string `json:"relkind"`
+		Page                   string `json:"page"`
+		Tuple                  string `json:"tuple"`
+		Transactionid          string `json:"transactionid"`
+		Client_addr            string `json:"client_addr"`
+		Usename                string `json:"usename"`
+		Application_name       string `json:"application_name"`
+		Backend_start          string `json:"backend_start"`
+		Backend_continued_time string `json:"backend_continued_time"`
+		Xact_start             string `json:"xact_start"`
+		Xact_continued_time    string `json:"xact_continued_time"`
+		Query_start            string `json:"query_start"`
+		Query_continued_time   string `json:"query_continued_time"`
+		Wait_event_type        string `json:"wait_event_type"`
+		Wait_event             string `json:"wait_event"`
+		State                  string `json:"state"`
+		Query                  string `json:"query"`
+	}
+
+	//定义列表返回的struct
+	type ListData struct {
+		Total int    `json:"total"`
+		Rows  []List `json:"rows"`
+	}
+
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_lock_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－进程管理－－获取某个数据库或所有数据库的受阻塞锁列表－－节点ID号为[" + r.FormValue("id") + "]－－数据库datname为[" + r.FormValue("datname") + "]－－"
+
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		error_msg = error_msg + "获取节点资料失败－－详情：" + noderow.Return_msg
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	where := " WHERE pg_locks.granted=false AND pg_locks.pid!=pg_backend_pid() "
+	if r.FormValue("datname") != "" {
+		where = where + " AND pg_stat_activity.datname='" + sql_data_encode(r.FormValue("datname")) + "' "
+	}
+
+	sql = `
+	SELECT
+	    pg_locks.locktype, 
+	    pg_locks.pid,
+	    pg_locks.mode,
+		case pg_locks.mode    
+		   when 'INVALID' then 0   
+		   when 'AccessShareLock' then 1   
+		   when 'RowShareLock' then 2   
+		   when 'RowExclusiveLock' then 3   
+		   when 'ShareUpdateExclusiveLock' then 4   
+		   when 'ShareLock' then 5   
+		   when 'ShareRowExclusiveLock' then 6   
+		   when 'ExclusiveLock' then 7   
+		   when 'AccessExclusiveLock' then 8   
+		   else 0   
+		end::integer AS mode_level,
+	    pg_locks.granted::text,
+	    COALESCE(pg_stat_activity.datname,'') AS datname,
+	    COALESCE(pg_namespace.nspname,'') AS nspname,
+	    COALESCE(pg_class.relname,'') AS relname, 	    
+	    COALESCE(pg_class.relkind::text,'') AS relkind,   
+	    COALESCE(pg_locks.page::TEXT,'') AS page,
+	    COALESCE(pg_locks.tuple::TEXT,'') AS tuple,
+	    COALESCE(pg_locks.transactionid::TEXT,'') AS transactionid,
+	    pg_stat_activity.client_addr::text,
+	    pg_stat_activity.usename,
+	    pg_stat_activity.application_name,
+	    pg_stat_activity.backend_start::timestamp(0)::text,
+	    (now()::timestamp(0)-pg_stat_activity.backend_start::timestamp(0))::text AS backend_continued_time,
+	    COALESCE(pg_stat_activity.xact_start::timestamp(0)::text,'') AS xact_start,
+	    COALESCE((now()::timestamp(0)-pg_stat_activity.xact_start::timestamp(0))::text,'') AS xact_continued_time,
+	    COALESCE(pg_stat_activity.query_start::timestamp(0)::text,'') AS query_start,
+	    COALESCE((now()::timestamp(0)-pg_stat_activity.query_start::timestamp(0))::text,'') AS query_continued_time,
+		COALESCE(pg_stat_activity.wait_event_type,'') AS wait_event_type ,
+		COALESCE(pg_stat_activity.wait_event,'') AS wait_event,
+	    pg_stat_activity.state,
+	    pg_stat_activity.query
+	FROM 
+	    pg_catalog.pg_locks AS pg_locks 
+	    LEFT OUTER JOIN pg_catalog.pg_class AS pg_class ON pg_class.oid=pg_locks.relation
+	    LEFT OUTER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid=pg_class.relnamespace
+	    LEFT OUTER JOIN pg_catalog.pg_stat_activity AS pg_stat_activity ON pg_stat_activity.pid=pg_locks.pid	
+	` + where + sql_sort(r)
+
+	rows, err = conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	var data ListData = ListData{}
+	data.Rows = make([]List, 0)
+	data.Total = 0
+
+	for rows.Next() {
+		var row List
+		err = rows.Scan(
+			&row.Locktype,
+			&row.Pid,
+			&row.Mode,
+			&row.Mode_level,
+			&row.Granted,
+			&row.Datname,
+			&row.Nspname,
+			&row.Relname,
+			&row.Relkind,
+			&row.Page,
+			&row.Tuple,
+			&row.Transactionid,
+			&row.Client_addr,
+			&row.Usename,
+			&row.Application_name,
+			&row.Backend_start,
+			&row.Backend_continued_time,
+			&row.Xact_start,
+			&row.Xact_continued_time,
+			&row.Query_start,
+			&row.Query_continued_time,
+			&row.Wait_event_type,
+			&row.Wait_event,
+			&row.State,
+			&row.Query)
+		if err != nil {
+			error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		data.Rows = append(data.Rows, row)
+	}
+	data.Total = len(data.Rows)
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：管理工具－－进程管理－－获取阻塞某个进程的锁列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func lockadmin_cloglock_listHandler(w http.ResponseWriter, r *http.Request) {
+	//节点行信息json结构
+	type List struct {
+		Locktype               string `json:"locktype"`
+		Pid                    int64  `json:"pid"`
+		Mode                   string `json:"mode"`
+		Mode_level             int32  `json:"mode_level"`
+		Granted                string `json:"granted"`
+		Datname                string `json:"datname"`
+		Nspname                string `json:"nspname"`
+		Relname                string `json:"relname"`
+		Relkind                string `json:"relkind"`
+		Page                   string `json:"page"`
+		Tuple                  string `json:"tuple"`
+		Transactionid          string `json:"transactionid"`
+		Client_addr            string `json:"client_addr"`
+		Usename                string `json:"usename"`
+		Application_name       string `json:"application_name"`
+		Backend_start          string `json:"backend_start"`
+		Backend_continued_time string `json:"backend_continued_time"`
+		Xact_start             string `json:"xact_start"`
+		Xact_continued_time    string `json:"xact_continued_time"`
+		Query_start            string `json:"query_start"`
+		Query_continued_time   string `json:"query_continued_time"`
+		Wait_event_type        string `json:"wait_event_type"`
+		Wait_event             string `json:"wait_event"`
+		State                  string `json:"state"`
+		Query                  string `json:"query"`
+	}
+
+	//定义列表返回的struct
+	type ListData struct {
+		Total int    `json:"total"`
+		Rows  []List `json:"rows"`
+	}
+
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_cloglock_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－进程管理－－获取某个数据库或所有数据库的受阻塞锁列表－－节点ID号为[" + r.FormValue("id") + "]－－进程号pid值为[" + r.FormValue("pid") + "]－－"
+
+	//判断pid合法性
+	_, err := strconv.Atoi(r.FormValue("pid"))
+	if err != nil {
+		error_msg = error_msg + "进程号pid不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		error_msg = error_msg + "获取节点资料失败－－详情：" + noderow.Return_msg
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	sql = `
+	SELECT 
+	   pg_proc.proname 
+	FROM
+	   pg_catalog.pg_proc as pg_proc 
+	   INNER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid=pg_proc.pronamespace 
+	WHERE 
+	   pg_proc.proname='pg_blocking_pids' 
+	   AND pg_namespace.nspname='pg_catalog';
+	`
+	rows, err = conn.Query(sql)
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	where := ""
+	if rows.Next() {
+		where = "AND pg_locks.pid IN (SELECT pid::integer FROM (SELECT regexp_split_to_table(array_to_string(pg_blocking_pids(" + sql_data_encode(r.FormValue("pid")) + "),','),',') AS pid) AS pg_blocking_pids)"
+	}
+	rows.Close()
+
+	sql = `
+	SELECT
+	    pg_locks.locktype, 
+	    pg_locks.pid,
+	    pg_locks.mode,
+		case pg_locks.mode    
+		   when 'INVALID' then 0   
+		   when 'AccessShareLock' then 1   
+		   when 'RowShareLock' then 2   
+		   when 'RowExclusiveLock' then 3   
+		   when 'ShareUpdateExclusiveLock' then 4   
+		   when 'ShareLock' then 5   
+		   when 'ShareRowExclusiveLock' then 6   
+		   when 'ExclusiveLock' then 7   
+		   when 'AccessExclusiveLock' then 8   
+		   else 0   
+		end::integer AS mode_level,
+	    pg_locks.granted::text,
+	    COALESCE(pg_stat_activity.datname,'') AS datname,
+	    COALESCE(pg_namespace.nspname,'') AS nspname,
+	    COALESCE(pg_class.relname,'') AS relname, 	    
+	    COALESCE(pg_class.relkind::text,'') AS relkind,   
+	    COALESCE(pg_locks.page::TEXT,'') AS page,
+	    COALESCE(pg_locks.tuple::TEXT,'') AS tuple,
+	    COALESCE(pg_locks.transactionid::TEXT,'') AS transactionid,
+	    pg_stat_activity.client_addr::text,
+	    pg_stat_activity.usename,
+	    pg_stat_activity.application_name,
+	    pg_stat_activity.backend_start::timestamp(0)::text,
+	    (now()::timestamp(0)-pg_stat_activity.backend_start::timestamp(0))::text AS backend_continued_time,
+	    COALESCE(pg_stat_activity.xact_start::timestamp(0)::text,'') AS xact_start,
+	    COALESCE((now()::timestamp(0)-pg_stat_activity.xact_start::timestamp(0))::text,'') AS xact_continued_time,
+	    COALESCE(pg_stat_activity.query_start::timestamp(0)::text,'') AS query_start,
+	    COALESCE((now()::timestamp(0)-pg_stat_activity.query_start::timestamp(0))::text,'') AS query_continued_time,
+		COALESCE(pg_stat_activity.wait_event_type,'') AS wait_event_type ,
+		COALESCE(pg_stat_activity.wait_event,'') AS wait_event,
+	    pg_stat_activity.state,
+	    pg_stat_activity.query
+	FROM 
+	    pg_catalog.pg_locks AS pg_locks 
+	    LEFT OUTER JOIN pg_catalog.pg_class AS pg_class ON pg_class.oid=pg_locks.relation
+	    LEFT OUTER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid=pg_class.relnamespace
+	    INNER JOIN pg_catalog.pg_stat_activity AS pg_stat_activity ON pg_stat_activity.pid=pg_locks.pid
+		INNER JOIN pg_catalog.pg_locks AS clog ON (
+			pg_locks.locktype is not distinct from clog.locktype   
+		    AND pg_locks.database is not distinct from clog.database   
+		    AND pg_locks.relation is not distinct from clog.relation   
+		    AND pg_locks.page is not distinct from clog.page   
+		    AND pg_locks.tuple is not distinct from clog.tuple   
+		    AND pg_locks.virtualxid is not distinct from clog.virtualxid   
+		    AND pg_locks.transactionid is not distinct from clog.transactionid   
+		    AND pg_locks.classid is not distinct from clog.classid   
+		    AND pg_locks.objid is not distinct from clog.objid   
+		    AND pg_locks.objsubid is not distinct from clog.objsubid 
+			AND clog.pid=` + sql_data_encode(r.FormValue("pid")) + ` 
+			AND pg_locks.pid!=` + sql_data_encode(r.FormValue("pid")) + ` 
+			AND clog.granted=false 	
+			` + where + `		
+		)	
+	` + sql_sort(r)
+
+	rows, err = conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	var data ListData = ListData{}
+	data.Rows = make([]List, 0)
+	data.Total = 0
+
+	for rows.Next() {
+		var row List
+		err = rows.Scan(
+			&row.Locktype,
+			&row.Pid,
+			&row.Mode,
+			&row.Mode_level,
+			&row.Granted,
+			&row.Datname,
+			&row.Nspname,
+			&row.Relname,
+			&row.Relkind,
+			&row.Page,
+			&row.Tuple,
+			&row.Transactionid,
+			&row.Client_addr,
+			&row.Usename,
+			&row.Application_name,
+			&row.Backend_start,
+			&row.Backend_continued_time,
+			&row.Xact_start,
+			&row.Xact_continued_time,
+			&row.Query_start,
+			&row.Query_continued_time,
+			&row.Wait_event_type,
+			&row.Wait_event,
+			&row.State,
+			&row.Query)
+		if err != nil {
+			error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		data.Rows = append(data.Rows, row)
+	}
+	data.Total = len(data.Rows)
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：管理工具－－表锁管理－－取消查询
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func lockadmin_cancelqueryHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_cancelqueryHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－表锁管理－－取消查询－－节点ID号为[" + r.FormValue("id") + "]－－要取消查询的pid为[" + r.FormValue("pid") + "]－－"
+
+	ret_code, ret_result := precess_cancelquery(r.FormValue("id"), r.FormValue("pid"))
+	if ret_code == "FAIL" {
+		error_msg = error_msg + ret_result
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	} else {
+		logcontent := error_msg + ret_result
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
+		return
+	}
+}
+
+/*
+功能描述：管理工具－－表锁管理－－杀死进程
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func lockadmin_killprocessHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_killprocessHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－表锁管理－－杀死进程－－节点ID号为[" + r.FormValue("id") + "]－－要杀死的pid为[" + r.FormValue("pid") + "]－－"
+
+	ret_code, ret_result := precess_killprecess(r.FormValue("id"), r.FormValue("pid"))
+	if ret_code == "FAIL" {
+		error_msg = error_msg + ret_result
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	} else {
+		logcontent := error_msg + ret_result
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
+		return
+	}
+}
+
+/*
+功能描述：管理工具－－查询统计－－检查要查询的节点是否加载了pg_stat_statments
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func querycount_pg_stat_statments_load_checkHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "querycount_pg_stat_statments_load_checkHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－查询统计－－获取某个数据库的查询统计时检查是否加载了pg_stat_statments－－节点ID号为[" + r.FormValue("id") + "]－－"
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		error_msg = error_msg + "获取节点资料失败－－详情：" + noderow.Return_msg
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+	sql := "SELECT current_setting( 'shared_preload_libraries' ) AS shared_preload_libraries,COALESCE((SELECT extname FROM pg_catalog.pg_extension WHERE extname='pg_stat_statements' limit 1),'') AS extname"
+	rows, err := conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	if rows.Next() {
+		var shared_preload_libraries string
+		var extname string
+		err = rows.Scan(&shared_preload_libraries, &extname)
+		if err != nil {
+			error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		if !strings.Contains(shared_preload_libraries, "pg_stat_statements") {
+			ret := "该节点还没有配置pg_stat_statements模块，无法对查询进行统计。"
+			OutputJson(w, "FAIL", ret, 0)
+			go write_log(remote_ip, modlename, username, "Log", error_msg+ret)
+			return
+			return
+		}
+		if extname != "pg_stat_statements" {
+			ret := "数据库[" + noderow.Pg_database + "]还没加载pg_stat_statments，请给连接的数据库加载pg_stat_statments模块"
+			OutputJson(w, "FAIL", ret, 0)
+			go write_log(remote_ip, modlename, username, "Log", error_msg+ret)
+			return
+			return
+		}
+		ret := "数据库[" + noderow.Pg_database + "]已经加载pg_stat_statments"
+		OutputJson(w, "SUCCESS", ret, 0)
+		go write_log(remote_ip, modlename, username, "Log", error_msg+ret)
+		return
+	} else {
+		error_msg = error_msg + "提取数据失败"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+}
+
+/*
+功能描述：管理工具－－查询统计－－重新统计
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func querycount_dialog_countresetHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "querycount_dialog_countresetHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－查询统计－－重新统计重置节点ID号为[" + r.FormValue("id") + "]－－"
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		error_msg = error_msg + "获取节点资料失败－－详情：" + noderow.Return_msg
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+	sql := "SELECT pg_stat_statements_reset()"
+	rows, err := conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	ret := "重新统计执行成功"
+	OutputJson(w, "SUCCESS", ret, 0)
+	go write_log(remote_ip, modlename, username, "Log", error_msg+ret)
+	return
+}
+
+/*
+功能描述：管理工具－－查询统计－－获取某个数据库或所有数据库的查询统计列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func querycount_record_listHandler(w http.ResponseWriter, r *http.Request) {
+	//节点行信息json结构
+	type List struct {
+		Rolname           string `json:"rolname"`
+		Datname           string `json:"datname"`
+		Queryid           int64  `json:"queryid"`
+		Query             string `json:"query"`
+		Calls             int64  `json:"calls"`
+		Total_time        string `json:"total_time"`
+		Min_time          string `json:"min_time"`
+		Max_time          string `json:"max_time"`
+		Mean_time         string `json:"mean_time"`
+		Stddev_time       string `json:"stddev_time"`
+		Rows              int64  `json:"rows"`
+		Mean_rows         int64  `json:"mean_rows"`
+		Shared_blks_hit   int64  `json:"shared_blks_hit"`
+		Shared_blks_read  int64  `json:"shared_blks_read"`
+		Total_shared_blks int64  `json:"total_shared_blks"`
+		Mean_shared_blks  int64  `json:"mean_shared_blks"`
+	}
+
+	//定义列表返回的struct
+	type ListData struct {
+		Total int    `json:"total"`
+		Rows  []List `json:"rows"`
+	}
+
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_lock_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－查询统计－－获取某个数据库的查询统计－－节点ID号为[" + r.FormValue("id") + "]－－数据库datname为[" + r.FormValue("datname") + "]－－"
+
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		error_msg = error_msg + "获取节点资料失败－－详情：" + noderow.Return_msg
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	where := ""
+	if r.FormValue("datname") != "" {
+		where = where + " WHERE pg_database.datname='" + sql_data_encode(r.FormValue("datname")) + "' "
+	}
+
+	//异步获取总记录数
+	sql = "SELECT COUNT(1) AS num FROM pg_stat_statements INNER JOIN pg_catalog.pg_database AS pg_database on pg_database.oid= pg_stat_statements.dbid " + where
+	total_chan := make(chan Totalnum)
+	go getnode_totalnum(noderow.Id, sql, total_chan)
+
+	sql = `
+	SELECT 
+	    pg_authid.rolname as rolname,
+	    pg_database.datname as datname,
+		pg_stat_statements.queryid,
+	    pg_stat_statements.query,
+	    pg_stat_statements.calls,
+	    round(pg_stat_statements.total_time::numeric,3)::text AS total_time,
+	    round(pg_stat_statements.min_time::numeric,3)::text AS min_time,   
+	    round(pg_stat_statements.max_time::numeric,3)::text AS max_time,   
+	    round(pg_stat_statements.mean_time::numeric,3)::text AS mean_time,    
+	    round(pg_stat_statements.stddev_time::numeric,3)::text AS stddev_time,   
+	    pg_stat_statements.rows, 
+	    (pg_stat_statements.rows/pg_stat_statements.calls)::bigint AS mean_rows, 
+	    pg_stat_statements.shared_blks_hit,
+	    pg_stat_statements.shared_blks_read,
+	    (pg_stat_statements.shared_blks_hit+pg_stat_statements.shared_blks_read) as total_shared_blks,
+		((pg_stat_statements.shared_blks_hit+pg_stat_statements.shared_blks_read)/pg_stat_statements.calls)::bigint AS mean_shared_blks
+	FROM 
+	    pg_stat_statements
+	    INNER JOIN pg_catalog.pg_authid AS pg_authid on pg_authid.oid=pg_stat_statements.userid 
+	    INNER JOIN pg_catalog.pg_database AS pg_database on pg_database.oid= pg_stat_statements.dbid		
+	` + where + sql_sort_limit(r)
+	rows, err = conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	var data ListData = ListData{}
+	data.Rows = make([]List, 0)
+	data.Total = 0
+
+	for rows.Next() {
+		var row List
+		err = rows.Scan(
+			&row.Rolname,
+			&row.Datname,
+			&row.Queryid,
+			&row.Query,
+			&row.Calls,
+			&row.Total_time,
+			&row.Min_time,
+			&row.Max_time,
+			&row.Mean_time,
+			&row.Stddev_time,
+			&row.Rows,
+			&row.Mean_rows,
+			&row.Shared_blks_hit,
+			&row.Shared_blks_read,
+			&row.Total_shared_blks,
+			&row.Mean_shared_blks)
+		if err != nil {
+			error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		data.Rows = append(data.Rows, row)
+	}
+
+	//返回异步获取总记录数
+	total := <-total_chan
+	if total.Err == "" {
+		data.Total = total.Total
+	} else {
+		error_msg = error_msg + total.Err
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	data.Total = total.Total
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：precess_cancelquery 取消指定进程的当前查询
+
+参数说明：
+nodeid   -- 字符类型，节点的id号
+process_pid --字符类型，进程号拼接字符串，如998,999,1000
+
+返回值说明：
+return_code -- 返回错误代号，值为FAIL或者SUCCESS
+return_msg  -- 返回错误或成功的详细信息
+*/
+
+func precess_cancelquery(nodeid string, process_pid string) (return_code string, return_msg string) {
+	//判断节点id合法性
+	id, err := strconv.Atoi(nodeid)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "节点id号不是合法的int类型"
+		return
+	}
+
+	//判断pid是否合法
+	if process_pid == "" {
+		return_code = "FAIL"
+		return_msg = "要取消查询的pid值为空"
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		return_code = "FAIL"
+		return_msg = "获取节点资料失败－－详情：" + noderow.Return_msg
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "连接数据库失败，详情：" + err.Error()
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	sql = `
+	SELECT array_to_json(array
+	(
+		SELECT
+			row_to_json(t.*)
+		FROM
+			(
+				SELECT
+					pg_cancel_backend(pid) as pg_cancel_backend,*
+				FROM
+					pg_catalog.pg_stat_activity AS pg_stat_activity
+				WHERE
+					pg_stat_activity.pid IN (` + sql_data_encode(process_pid) + `)
+					AND pg_stat_activity.pid!=pg_catalog.pg_backend_pid()
+			) AS t
+	))::text AS result
+	`
+	rows, err = conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "执行查询失败，详情：" + err.Error()
+		return
+	}
+
+	result := ""
+	for rows.Next() {
+		err = rows.Scan(&result)
+		if err != nil {
+			return_code = "FAIL"
+			return_msg = "执行查询失败，详情：" + err.Error()
+			return
+		}
+	}
+	return_code = "SUCCESS"
+	return_msg = result
+	return
+
+}
+
+/*
+功能描述：管理工具－－表锁管理－－杀死进程
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func precess_killprecess(nodeid string, process_pid string) (return_code string, return_msg string) {
+	//判断节点id合法性
+	id, err := strconv.Atoi(nodeid)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "节点id号不是合法的int类型"
+		return
+	}
+
+	//判断pid是否合法
+	if process_pid == "" {
+		return_code = "FAIL"
+		return_msg = "要杀死的进程pid值为空"
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		return_code = "FAIL"
+		return_msg = "获取节点资料失败－－详情：" + noderow.Return_msg
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = noderow.Pg_database
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "连接数据库失败，详情：" + err.Error()
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	sql = `
+	SELECT array_to_json(array		
+	(
+		SELECT
+			row_to_json(t.*)
+		FROM 
+			(
+				SELECT 
+					pg_terminate_backend(pid) as pg_terminate_backend,*
+				FROM 
+					pg_catalog.pg_stat_activity AS pg_stat_activity 
+				WHERE 
+					pg_stat_activity.pid IN (` + sql_data_encode(process_pid) + `)
+					AND pg_stat_activity.pid!=pg_catalog.pg_backend_pid()
+			) AS t
+	))::text AS result
+	`
+	rows, err = conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "执行查询失败，详情：" + err.Error()
+		return
+	}
+
+	result := ""
+	for rows.Next() {
+		err = rows.Scan(&result)
+		if err != nil {
+			return_code = "FAIL"
+			return_msg = "执行查询失败，详情：" + err.Error()
+			return
+		}
+	}
+
+	return_code = "SUCCESS"
+	return_msg = result
+	return
 }
 
 /*

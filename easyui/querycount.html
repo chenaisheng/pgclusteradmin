@@ -1,0 +1,276 @@
+<div class="easyui-layout" fit="true"> 
+  <div region="west" split="true" title="选择要查看数据库" style="width:260px;border-right:0px dotted #ccc;border-left:0px;border-top:0px;border-bottom:0px">
+    <table id="querycount_database_list" class="easyui-datagrid">   
+      <thead>
+        <tr>          
+          <th data-options="field:'datname',width:'230px',hidden:true">数据库名称</th>
+          <th data-options="field:'dattext',width:'223px'">数据库列表</th> 
+        </tr>
+      </thead>
+    </table> 
+  </div> 
+  <div region="center" border="false" > 
+    <table id="querycount_record_list" class="easyui-datagrid"> 
+      <thead data-options="frozen:true">    
+        <tr>       
+          <th data-options="field:'rolname',sortable:true,width:'60px'">用户名</th>
+          <th data-options="field:'datname',sortable:true,width:'80px'">数据库名称</th>
+        </tr>
+      </thead>    
+      <thead>
+        <tr>           
+          <th data-options="field:'calls',sortable:true,width:'70px'">调用次数</th>
+          <th data-options="field:'total_time',sortable:true,width:'70px'">总共时间</th>
+          <th data-options="field:'min_time',sortable:true,width:'70px'">最小用时</th>
+          <th data-options="field:'max_time',sortable:true,width:'70px'">最大用时</th>
+          <th data-options="field:'mean_time',sortable:true,width:'70px'">平均用时</th>
+          <th data-options="field:'stddev_time',sortable:true,width:'70px'">用时偏差</th>
+          <th data-options="field:'rows',sortable:true,width:'130px'">总影响记录数</th>
+          <th data-options="field:'mean_rows',sortable:true,width:'130px'">平均影响记录数</th>
+          <th data-options="field:'shared_blks_hit',sortable:true,width:'130px'">共享块缓冲命中总数</th>
+          <th data-options="field:'shared_blks_read',sortable:true,width:'130px'">读取的共享块的总数</th>
+          <th data-options="field:'total_shared_blks',sortable:true,width:'100px'">读取块总数</th>
+		  <th data-options="field:'mean_shared_blks',sortable:true,width:'120px'">平均每次读取块数</th>
+		  <th data-options="field:'query',sortasble:true,width:'3000px'">执行语句</th>
+        </tr>
+      </thead>
+    </table> 
+  </div>
+</div> 
+
+<script type="text/javascript">
+
+$(document).ready(function()
+{
+    //设置数据库列表表格的格式
+    $('#querycount_database_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'dattext',
+        'sortOrder':'desc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'remoteSort':false,
+        'height':'100%',
+        'width':'100%',
+        'idField':'datname',
+        'onClickRow':function(rowIndex, rowData){       
+            querycount_record_show();
+        },
+        'onLoadSuccess':function(data){
+            var rows = $('#querycount_database_list').datagrid('getRows')
+            if (rows.length>0){
+                $('#querycount_database_list').datagrid('selectRow',0);
+                querycount_record_show();
+            }
+        }
+    });  
+    
+    //设置查询统计信息表格的格式
+    $('#querycount_record_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'queryid',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':true,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'pid',
+        'pageSize':100,
+        'pageList':[10,20,30,40,50,100,500,1000],
+        'border':false,
+        view: detailview,
+        detailFormatter: function(rowIndex, rowData){			
+            return '<pre style="margin-top: 5px;margin-bottom: 5px;">' + rowData.query +  '</pre>' ;
+        }
+    }); 
+	
+	function querycount_pg_stat_statments_load_check(){
+		var row = $('#dg').datagrid('getSelected');    
+        if (!row){
+            var rows = $('#dg').datagrid('getChecked');  
+            if (rows.length!=1){
+                $('#querycount_dialog').dialog('close'); 
+                $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                return;
+            }
+            $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+            var row = $('#dg').datagrid('getSelected');      
+        }  
+		$.ajax({
+            type:"POST",
+            url:"/querycount_pg_stat_statments_load_check/",
+            data:{id:row.id},
+            success:function(result){
+                if (result.return_code=="FAIL"){                       
+                    if ( result.show_login_dialog == 1){   
+                        $('#querycount_dialog').dialog('close'); 
+                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                    }
+                    else{
+                        $.messager.alert('错误提示',result.return_msg, 'error');   
+						$('#querycount_dialog').dialog('close'); 
+                    }
+                }
+            },
+            dataType:"json"
+        });  
+	}	
+	
+    //打开页面时初始化
+    function querycount_init(){
+        var row = $('#dg').datagrid('getSelected');    
+        if (!row){
+            var rows = $('#dg').datagrid('getChecked');  
+            if (rows.length!=1){
+                $('#querycount_dialog').dialog('close'); 
+                $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                return;
+            }
+            $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+            var row = $('#dg').datagrid('getSelected');      
+        }  
+		querycount_pg_stat_statments_load_check();        
+        $.ajax({
+            type:"POST",
+            url:"/get_database_list/",
+            data:{id:row.id},
+            success:function(result){
+                if (result.return_code=="FAIL"){                       
+                    if ( result.show_login_dialog == 1){   
+                        $('#querycount_dialog').dialog('close'); 
+                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                    }
+                    else{
+                        $.messager.alert('错误提示',result.return_msg, 'error');   
+                    }
+                }
+                else{
+                    result.unshift({ "datname": "", "dattext": "所有数据库" });  
+                    $('#querycount_database_list').datagrid('loadData', { total: result.length, rows: result });  
+                }  
+            },
+            dataType:"json"
+        });  
+    }
+	
+    //显示选择数据库的进程
+    function querycount_record_show(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#querycount_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+        }  
+        var row = $('#querycount_database_list').datagrid('getSelected');  
+        if (!row){
+            $.messager.alert('系统提示',"请选择要查看的数据库", 'warning');   
+            return
+        }		
+        //显示查询统计数据
+		//if (row.datname!="postgres") return;
+        $('#querycount_record_list').datagrid({'url':'/querycount_record_list/?id='+noderow.id+'&datname='+row.datname});	
+    }
+
+    //重新统计
+    $('#querycount_dialog_countreset').unbind('click').bind('click', function(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#querycount_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+            return;
+        }  
+        $.messager.confirm('重新统计确认','重新统计是针对节点执行，你确认要执行重新统计操作吗？', function(r){
+            if (r){
+                $.ajax({
+                    type:"POST",
+                    url:"/querycount_dialog_countreset/",
+                    data:{id:noderow.id},
+                    success:function(result){
+                        if (result.return_code=="FAIL"){                       
+                            if ( result.show_login_dialog == 1){   
+                                $('#querycount_dialog').dialog('close'); 
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                            else{
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                        }
+                        else{
+                            //执行成功，刷新查询统计数据
+                            querycount_record_show();
+							$.messager.alert('系统提示',result.return_msg, 'info');   
+                        }  
+                    },
+                    dataType:"json"
+                });            
+            }
+        }); 
+        
+    });	
+	
+	//导出数据
+    $('#querycount_dialog_export').unbind('click').bind('click', function(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#querycount_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+            return;
+        }  
+        var rows = $('#querycount_record_list').datagrid('getChecked'); 
+        if ( rows.length < 1 ){
+            $.messager.alert('系统提示',"请选择要杀死的进程", 'warning'); 
+            return;
+        }
+        var pid  = "" 
+        for (var i=0; i<rows.length; i++){
+            pid = pid + rows[i].pid + ',' ;
+        }
+        pid=pid.substring(0,pid.length-1);
+        $.messager.confirm('进程杀死确认','你确认要执行进程杀死操作吗', function(r){
+            if (r){
+                $.ajax({
+                    type:"POST",
+                    url:"/querycount_killprocess/",
+                    data:{id:noderow.id,pid:pid},
+                    success:function(result){
+                        if (result.return_code=="FAIL"){                       
+                            if ( result.show_login_dialog == 1){   
+                                $('#querycount_dialog').dialog('close'); 
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                            else{
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                        }
+                        else{
+                            //执行成功，刷新显示数据库的进程数据
+                            querycount_record_show();
+                        }  
+                    },
+                    dataType:"json"
+                });            
+            }
+        }); 
+        
+    });	
+
+	//进程管理窗口－－取消按钮
+    $('#querycount_dialog_cancel').unbind('click').bind('click', function(){
+        $('#querycount_dialog').dialog('close'); 
+    });  	
+	
+    //打开窗口时初始化
+    querycount_init();
+	
+});
+
+</script>

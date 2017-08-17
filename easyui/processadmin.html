@@ -1,0 +1,253 @@
+<div class="easyui-layout" fit="true"> 
+  <div region="west" split="true" title="选择要查看数据库" style="width:260px;border-right:0px dotted #ccc;border-left:0px;border-top:0px;border-bottom:0px">
+    <table id="processadmin_database_list" class="easyui-datagrid">   
+      <thead>
+        <tr>          
+          <th data-options="field:'datname',width:'230px',hidden:true">数据库名称</th>
+          <th data-options="field:'dattext',sortasble:true,width:'223px'">数据库列表</th> 
+        </tr>
+      </thead>
+    </table> 
+  </div> 
+  <div region="center" border="false" > 
+    <table id="processadmin_process_list" class="easyui-datagrid"> 
+      <thead data-options="frozen:true">    
+        <tr>       
+          <th field="id" checkbox="true"></th> 
+          <th data-options="field:'pid',sortable:true,width:'60px'">进程pid</th>
+          <th data-options="field:'datname',sortable:true,width:'80px'">数据库名称</th>
+        </tr>
+      </thead>    
+      <thead>
+        <tr> 
+          <th data-options="field:'client_addr',sortasble:true,width:'100px'">客户端ip</th>
+          <th data-options="field:'usename',sortable:true,width:'60px'">用户名</th>
+          <th data-options="field:'application_name',sortable:true,width:'90px'">应用程序名称</th>
+          <th data-options="field:'backend_start',sortable:true,width:'130px'">开始连接时间</th>
+          <th data-options="field:'backend_continued_time',sortable:true,width:'65px'">连接时长</th>
+          <th data-options="field:'xact_start',sortable:true,width:'130px'">事务开始时间</th>
+          <th data-options="field:'xact_continued_time',sortable:true,width:'90px'">事务持续时长</th>
+          <th data-options="field:'query_start',sortable:true,width:'130px'">查询开始时间</th>
+          <th data-options="field:'query_continued_time',sortable:true,width:'90px'">查询持续时长</th>
+          <th data-options="field:'wait_event_type',sortable:true,width:'100px'">等待的事件类型</th>
+          <th data-options="field:'wait_event',sortable:true,width:'100px'">等待锁类型</th>
+          <th data-options="field:'state',sortable:true,width:'100px'">当前状态</th>
+          <th data-options="field:'backend_xid',sortable:true,width:'60px'">事务xid</th>
+          <th data-options="field:'query',sortable:true,width:'300px'">当前执行语句</th>
+        </tr>
+      </thead>
+    </table> 
+  </div>
+</div> 
+<script type="text/javascript">
+
+$(document).ready(function()
+{
+    //设置数据库列表表格的格式
+    $('#processadmin_database_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'dattext',
+        'sortOrder':'desc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'remoteSort':false,
+        'height':'100%',
+        'width':'100%',
+        'idField':'datname',
+        'onClickRow':function(rowIndex, rowData){       
+            processadmin_process_show();
+        },
+        'onLoadSuccess':function(data){
+            var rows = $('#processadmin_database_list').datagrid('getRows')
+            if (rows.length>0){
+                $('#processadmin_database_list').datagrid('selectRow',0);
+                processadmin_process_show();
+            }
+        }
+    });  
+    
+    //设置进程信息表格的格式
+    $('#processadmin_process_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'pid',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':false,
+        'remoteSort':true,
+        'height':'100%',
+        'width':'100%',
+        'idField':'pid',
+        'pageSize':1000000,
+        'pageList':[1000000],
+        'border':false,
+        view: detailview,
+        detailFormatter: function(rowIndex, rowData){			
+            return '<pre style="margin-top: 5px;margin-bottom: 5px;">' + rowData.query +  '</pre>' ;
+        }
+    }); 	
+	
+    //打开页面时初始化
+    function processadmin_init(){
+        var row = $('#dg').datagrid('getSelected');    
+        if (!row){
+            var rows = $('#dg').datagrid('getChecked');  
+            if (rows.length!=1){
+                $('#processadmin_dialog').dialog('close'); 
+                $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                return;
+            }
+            $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+            var row = $('#dg').datagrid('getSelected');      
+        }  
+        
+        $.ajax({
+            type:"POST",
+            url:"/get_database_list/",
+            data:{id:row.id},
+            success:function(result){
+                if (result.return_code=="FAIL"){                       
+                    if ( result.show_login_dialog == 1){   
+                        $('#processadmin_dialog').dialog('close'); 
+                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                    }
+                    else{
+                        $.messager.alert('错误提示',result.return_msg, 'error');   
+                    }
+                }
+                else{
+                    result.unshift({ "datname": "", "dattext": "所有数据库" });  
+                    $('#processadmin_database_list').datagrid('loadData', { total: result.length, rows: result });  
+                }  
+            },
+            dataType:"json"
+        });  
+    }
+	
+    //显示选择数据库的进程
+    function processadmin_process_show(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#processadmin_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+        }  
+        var row = $('#processadmin_database_list').datagrid('getSelected');  
+        if (!row){
+            $.messager.alert('系统提示',"请选择要查看的数据库", 'warning');   
+            return
+        }		
+        //显示进程数据
+        $('#processadmin_process_list').datagrid({'url':'/processadmin_process_list/?id='+noderow.id+'&datname='+row.datname});	
+    }
+
+    //取消查询
+    $('#processadmin_dialog_cancelquery').unbind('click').bind('click', function(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#processadmin_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+            return;
+        }  
+        var rows = $('#processadmin_process_list').datagrid('getChecked'); 
+        if ( rows.length < 1 ){
+            $.messager.alert('系统提示',"请选择要取消查询的进程", 'warning'); 
+            return;
+        }
+        var pid  = "" 
+        for (var i=0; i<rows.length; i++){
+            pid = pid + rows[i].pid + ',' ;
+        }
+        pid=pid.substring(0,pid.length-1);
+        $.messager.confirm('查询取消确认','你确认要执行查询取消操作吗', function(r){
+            if (r){
+                $.ajax({
+                    type:"POST",
+                    url:"/processadmin_cancelquery/",
+                    data:{id:noderow.id,pid:pid},
+                    success:function(result){
+                        if (result.return_code=="FAIL"){                       
+                            if ( result.show_login_dialog == 1){   
+                                $('#processadmin_dialog').dialog('close'); 
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                            else{
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                        }
+                        else{
+                            //执行成功，刷新显示数据库的进程数据
+                            processadmin_process_show();
+                        }  
+                    },
+                    dataType:"json"
+                });            
+            }
+        }); 
+        
+    });	
+	
+	//杀死进程
+    $('#processadmin_dialog_killprocess').unbind('click').bind('click', function(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#processadmin_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+            return;
+        }  
+        var rows = $('#processadmin_process_list').datagrid('getChecked'); 
+        if ( rows.length < 1 ){
+            $.messager.alert('系统提示',"请选择要杀死的进程", 'warning'); 
+            return;
+        }
+        var pid  = "" 
+        for (var i=0; i<rows.length; i++){
+            pid = pid + rows[i].pid + ',' ;
+        }
+        pid=pid.substring(0,pid.length-1);
+        $.messager.confirm('进程杀死确认','你确认要执行进程杀死操作吗', function(r){
+            if (r){
+                $.ajax({
+                    type:"POST",
+                    url:"/processadmin_killprocess/",
+                    data:{id:noderow.id,pid:pid},
+                    success:function(result){
+                        if (result.return_code=="FAIL"){                       
+                            if ( result.show_login_dialog == 1){   
+                                $('#processadmin_dialog').dialog('close'); 
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                            else{
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                        }
+                        else{
+                            //执行成功，刷新显示数据库的进程数据
+                            processadmin_process_show();
+                        }  
+                    },
+                    dataType:"json"
+                });            
+            }
+        }); 
+        
+    });	
+
+	//进程管理窗口－－取消按钮
+    $('#processadmin_dialog_cancel').unbind('click').bind('click', function(){
+        $('#processadmin_dialog').dialog('close'); 
+    });  	
+	
+    //打开窗口时初始化
+    processadmin_init();
+	
+});
+
+</script>

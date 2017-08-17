@@ -9,6 +9,7 @@
  <script type="text/javascript" src="./jquery.min.js"></script>
  <script type="text/javascript" src="./jquery.easyui.min.js"></script>
  <script type="text/javascript" src="./jquery.easyui.rule.js"></script> 
+ <script type="text/javascript" src="./datagrid-detailview.js"></script>
  <script type="text/javascript" src="./locale/easyui-lang-zh_CN.js"></script>
 </head>
 <STYLE type=text/css>
@@ -77,8 +78,15 @@
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-wakeup',plain:true" id="cy_slave_wakeup_click">备机唤醒</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-promote',plain:true" id="cy_promote_click">主备切换</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-report',plain:true" id="cy_inspection_report_click">巡检报告</a>
+  <a href="javascript:void(0)" class="easyui-menubutton" data-options="iconCls:'icon-tools',plain:true,menu:'#cy_tools_menu'">管理工具</a>
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-password',plain:true" id="cy_password_click">修改登录密码</a>  
   <a href="javascript:void(0)" class="easyui-linkbutton" data-options="iconCls:'icon-exit',plain:true" id="cy_exit_click">退出</a>  
+</div>
+
+<div id="cy_tools_menu" style="width:150px;">
+  <div data-options="iconCls:'icon-process'" id="cy_processadmin_click">进程管理</div>
+  <div data-options="iconCls:'icon-unlock'" id="cy_lockadmin_click">表锁管理</div>
+  <div data-options="iconCls:'icon-count'" id="cy_querycount_click">查询统计</div>
 </div>
 
 <!--修改资料窗口-->
@@ -753,16 +761,16 @@
                <th data-options="field:'datname',sortable:true,width:'130px'">数据库名</th> 
                <th data-options="field:'schemaname',sortable:true,width:'130px'">所属模式</th> 
                <th data-options="field:'tablename',sortable:true,width:'150px',align:'left'">表名</th>
-			   <th data-options="field:'tabletype',sortable:true,width:'80px',align:'left'">表类型</th>
+               <th data-options="field:'tabletype',sortable:true,width:'80px',align:'left'">表类型</th>
                <th data-options="field:'tablecomment',sortable:true,width:'150px',align:'left'">注释</th>
                <th data-options="field:'tableowner',sortable:true,width:'70px',align:'left'">所有者</th>
                <th data-options="field:'tablespace',sortable:true,width:'80px',align:'center'">存储表空间</th>
-			   <th data-options="field:'reltuples',sortable:true,width:'100px',align:'right'">记录数（估值）</th>
+               <th data-options="field:'reltuples',sortable:true,width:'100px',align:'right'">记录数（估值）</th>
                <th data-options="field:'rownum',sortable:true,width:'75px',align:'right'">记录数</th>
-			   <th data-options="field:'rownum_deviation',sortable:true,width:'75px',align:'right'">记录数差异</th>
+               <th data-options="field:'rownum_deviation',sortable:true,width:'75px',align:'right'">记录数差异</th>
                <th data-options="field:'relationsize',sortable:true,width:'100px',align:'left'">表文件占用空间</th>
-			   <th data-options="field:'relpages',sortable:true,width:'100px',align:'right'">占用盘页（估值）</th>
-			   <th data-options="field:'row_of_size',sortable:true,width:'100px',align:'left'">每行占用空间</th>
+               <th data-options="field:'relpages',sortable:true,width:'100px',align:'right'">占用盘页（估值）</th>
+               <th data-options="field:'row_of_size',sortable:true,width:'100px',align:'left'">每行占用空间</th>
                <th data-options="field:'indexnum',sortable:true,width:'75px',align:'right'">索引数</th>
                <th data-options="field:'indexsize',sortable:true,width:'120px',align:'left'">索引文件占用空间</th>
                <th data-options="field:'tablesize',sortable:true,width:'120px',align:'left'">表相关文件占用空间</th>	
@@ -778,16 +786,16 @@
            </thead>
          </table> 
        </div>
-	   <div title="外部表" style="padding:0px"> 
+       <div title="外部表" style="padding:0px"> 
          <table id="inspection_report_foreign_table_list" class="easyui-datagrid">   
            <thead>
              <tr>
                <th data-options="field:'datname',sortable:true,width:'130px'">数据库名</th> 
                <th data-options="field:'schemaname',sortable:true,width:'130px'">所属模式</th> 
                <th data-options="field:'tablename',sortable:true,width:'150px',align:'left'">表名</th>
-			   <th data-options="field:'srvname',sortable:true,width:'150px',align:'left'">外部服务器名称</th>
-			   <th data-options="field:'srvoptions',sortable:true,width:'350px',align:'left'">外部服务器配置</th>
-			   <th data-options="field:'ftoptions',sortable:true,width:'350px',align:'left'">外部表名称</th>
+               <th data-options="field:'srvname',sortable:true,width:'150px',align:'left'">外部服务器名称</th>
+               <th data-options="field:'srvoptions',sortable:true,width:'350px',align:'left'">外部服务器配置</th>
+               <th data-options="field:'ftoptions',sortable:true,width:'350px',align:'left'">外部表名称</th>
                <th data-options="field:'tablecomment',sortable:true,width:'150px',align:'left'">注释</th>
                <th data-options="field:'tableowner',sortable:true,width:'70px',align:'left'">所有者</th>
              </tr>
@@ -857,6 +865,36 @@
   <a href="javascript:void(0)" class="easyui-linkbutton" id="inspection_report_insert_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
 </div>                    
 <!--创建巡检报告对话窗口-->
+
+<!--进程管理窗口-->
+<div id="processadmin_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#processadmin_dialog_button',closed:true,width:1250,height:550,resizable:true,closable:true,maximizable:true,iconCls:'icon-process'"> <!--modal是遮罩层--> 
+</div> 
+<div id="processadmin_dialog_button">
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="processadmin_dialog_cancelquery" data-options="iconCls:'icon-cancelquery',width:100">取消查询</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="processadmin_dialog_killprocess" data-options="iconCls:'icon-killprocess',width:100">杀死进程</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="processadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
+</div>           
+<!--进程管理窗口-->
+
+<!--表锁管理窗口-->
+<div id="lockadmin_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#lockadmin_dialog_button',closed:true,width:1250,height:550,resizable:true,closable:true,maximizable:true,iconCls:'icon-unlock'"> <!--modal是遮罩层--> 
+</div> 
+<div id="lockadmin_dialog_button">
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="lockadmin_dialog_cancelquery" data-options="iconCls:'icon-cancelquery',width:100">取消查询</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="lockadmin_dialog_killprocess" data-options="iconCls:'icon-killprocess',width:100">杀死进程</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="lockadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
+</div>           
+<!--表锁管理窗口-->
+
+<!--查询统计窗口-->
+<div id="querycount_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#querycount_dialog_button',closed:true,width:1250,height:550,resizable:true,closable:true,maximizable:true,iconCls:'icon-process'"> <!--modal是遮罩层--> 
+</div> 
+<div id="querycount_dialog_button">
+  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="querycount_dialog_countreset" data-options="iconCls:'icon-count',width:100">重新统计</a>
+  <!--<a href="javascript:void(0)" class="easyui-linkbutton" id="querycount_dialog_export" data-options="iconCls:'icon-export',width:80">导出</a>-->  
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="querycount_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
+</div>           
+<!--查询统计窗口-->
 
 <!--操作员密码修改窗口-->
 <div id="password_update_dialog" class="easyui-dialog" data-options="modal:true,closed:true,width:500,height:350,resizable:false,closable:true,iconCls:'icon-password'"> <!--modal是遮罩层--> 
@@ -2411,7 +2449,60 @@ $(document).ready(function()
 	//巡检报表管理窗口－－取消按钮
     $('#inspection_report_dialog_cancel').bind('click', function(){
         $('#inspection_report_dialog').dialog('close');     
-    });  
+    });  	
+	
+	//打开进程管理窗口
+    $('#cy_processadmin_click').bind('click', function(){    
+	    var row = $('#dg').datagrid('getSelected');    
+        if (!row)
+            {
+                var rows = $('#dg').datagrid('getChecked');  
+                if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                          return;
+                     }
+                $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                var row = $('#dg').datagrid('getSelected');      
+            } 
+        $('#processadmin_dialog').dialog('open').dialog('center').dialog('setTitle','进程管理－－'+row.node_name).dialog('refresh','processadmin.html'); 		
+    }); 
+	
+	
+	//打开表锁管理窗口
+    $('#cy_lockadmin_click').bind('click', function(){    
+	    var row = $('#dg').datagrid('getSelected');    
+        if (!row)
+            {
+                var rows = $('#dg').datagrid('getChecked');  
+                if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                          return;
+                     }
+                $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                var row = $('#dg').datagrid('getSelected');      
+            } 
+        $('#lockadmin_dialog').dialog('open').dialog('center').dialog('setTitle','表锁管理－－'+row.node_name).dialog('refresh','lockadmin.html'); 		 		
+    }); 
+	
+	//打开查询统计窗口
+    $('#cy_querycount_click').bind('click', function(){    
+	    var row = $('#dg').datagrid('getSelected');    
+        if (!row)
+            {
+                var rows = $('#dg').datagrid('getChecked');  
+                if (rows.length!=1)
+                     {
+                          $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                          return;
+                     }
+                $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+                var row = $('#dg').datagrid('getSelected');      
+            } 
+        $('#querycount_dialog').dialog('open').dialog('center').dialog('setTitle','查询统计－－'+row.node_name).dialog('refresh','querycount.html');  		
+    }); 
+	
     
     //操作员修改登录密码
     $('#cy_password_click').bind('click', function(){      

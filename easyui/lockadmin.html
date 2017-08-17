@@ -1,0 +1,355 @@
+<div class="easyui-layout" fit="true"> 
+  <div region="west" split="true" title="选择要查看数据库" style="width:260px;border-right:0px dotted #ccc;border-left:0px;border-top:0px;border-bottom:0px">
+    <table id="lockadmin_database_list" class="easyui-datagrid">   
+      <thead>
+        <tr>          
+          <th data-options="field:'datname',width:'230px',hidden:true">数据库名称</th>
+          <th data-options="field:'dattext',width:'223px'">数据库列表</th> 
+        </tr>
+      </thead>
+    </table> 
+  </div> 
+  <div region="center" border="false">   
+    <table id="lockadmin_lock_list" class="easyui-datagrid"> 
+      <thead data-options="frozen:true">    
+        <tr> 
+          <th data-options="field:'pid',sortable:true,width:'60px'">进程pid</th>
+          <th data-options="field:'locktype',sortable:true,width:'100px'">锁类别</th>
+          <th data-options="field:'mode',sortable:true,width:'160px'">锁模式</th>
+          <th data-options="field:'mode_level',sortable:true,width:'60px'">锁级</th>
+        </tr>
+      </thead>    
+      <thead>
+        <tr> 
+          <th data-options="field:'granted',sortable:true,width:'60px'">已授予</th>
+          <th data-options="field:'datname',sortable:true,width:'100px'">数据库名</th>
+          <th data-options="field:'nspname',sortable:true,width:'90px'">模式</th>
+          <th data-options="field:'relname',sortable:true,width:'110px'">表名</th>
+          <th data-options="field:'relkind',sortable:true,width:'65px'">对象类别</th>
+          <th data-options="field:'page',sortable:true,width:'65px'">页号</th>
+          <th data-options="field:'tuple',sortable:true,width:'65px'">元组号</th>
+          <th data-options="field:'transactionid',sortable:true,width:'65px'">事务xid</th>
+          <th data-options="field:'client_addr',sortasble:true,width:'100px'">客户端ip</th>
+          <th data-options="field:'usename',sortable:true,width:'60px'">用户名</th>
+          <th data-options="field:'application_name',sortable:true,width:'90px'">应用程序名称</th>
+          <th data-options="field:'xact_start',sortable:true,width:'130px'">事务开始时间</th>
+          <th data-options="field:'xact_continued_time',sortable:true,width:'90px'">事务持续时长</th>
+          <th data-options="field:'query_start',sortable:true,width:'130px'">查询开始时间</th>
+          <th data-options="field:'query_continued_time',sortable:true,width:'90px'">查询持续时长</th>
+          <th data-options="field:'wait_event_type',sortable:true,width:'100px'">等待的事件类型</th>
+          <th data-options="field:'wait_event',sortable:true,width:'100px'">等待锁类型</th>
+          <th data-options="field:'state',sortable:true,width:'100px'">当前状态</th>
+          <th data-options="field:'query',sortable:true,width:'300px'">当前执行语句</th>
+        </tr>
+      </thead>
+    </table> 
+  </div>
+  <div data-options="region:'south'" split="true" style="height:300px">
+  <table id="lockadmin_cloglock_list" class="easyui-datagrid"> 
+    <thead data-options="frozen:true">    
+      <tr>       
+        <th field="id" checkbox="true"></th> 
+        <th data-options="field:'pid',sortable:true,width:'60px'">进程pid</th>
+        <th data-options="field:'locktype',sortable:true,width:'100px'">锁类别</th>
+        <th data-options="field:'mode',sortable:true,width:'150px'">锁模式</th>
+        <th data-options="field:'mode_level',sortable:true,width:'60px'">锁级</th>
+      </tr>
+    </thead>    
+    <thead>
+      <tr> 
+        <th data-options="field:'granted',sortable:true,width:'60px'">已授予</th>
+        <th data-options="field:'datname',sortable:true,width:'100px'">数据库名</th>
+        <th data-options="field:'nspname',sortable:true,width:'80px'">模式</th>
+        <th data-options="field:'relname',sortable:true,width:'110px'">表名</th>
+        <th data-options="field:'relkind',sortable:true,width:'65px'">对象类别</th>
+        <th data-options="field:'page',sortable:true,width:'65px'">页号</th>
+        <th data-options="field:'tuple',sortable:true,width:'65px'">元组号</th>
+        <th data-options="field:'transactionid',sortable:true,width:'65px'">事务xid</th>
+        <th data-options="field:'client_addr',sortasble:true,width:'100px'">客户端ip</th>
+        <th data-options="field:'usename',sortable:true,width:'60px'">用户名</th>
+        <th data-options="field:'application_name',sortable:true,width:'90px'">应用程序名称</th>
+        <th data-options="field:'xact_start',sortable:true,width:'130px'">事务开始时间</th>
+        <th data-options="field:'xact_continued_time',sortable:true,width:'90px'">事务持续时长</th>
+        <th data-options="field:'query_start',sortable:true,width:'130px'">查询开始时间</th>
+        <th data-options="field:'query_continued_time',sortable:true,width:'90px'">查询持续时长</th>
+        <th data-options="field:'wait_event_type',sortable:true,width:'100px'">等待的事件类型</th>
+        <th data-options="field:'wait_event',sortable:true,width:'100px'">等待锁类型</th>
+        <th data-options="field:'state',sortable:true,width:'100px'">当前状态</th>
+        <th data-options="field:'query',sortable:true,width:'300px'">当前执行语句</th>
+      </tr>
+    </thead>
+  </table> 
+  </div>
+</div> 
+<script type="text/javascript">
+
+$(document).ready(function()
+{
+    //设置数据库列表表格的格式
+    $('#lockadmin_database_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'dattext',
+        'sortOrder':'desc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'remoteSort':false,
+        'height':'100%',
+        'width':'100%',
+        'idField':'datname',
+        'onClickRow':function(rowIndex, rowData){       
+            lockadmin_lock_show();
+        },
+        'onLoadSuccess':function(data){
+            var rows = $('#lockadmin_database_list').datagrid('getRows')
+            if (rows.length>0){
+                $('#lockadmin_database_list').datagrid('selectRow',0);
+                lockadmin_lock_show();
+            }
+        }
+    });  
+    
+    //设置受阻塞锁表格的格式
+    $('#lockadmin_lock_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'pid',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':false,
+        'remoteSort':true,
+        'height':'98%',
+        'width':'99%',
+        'idField':'pid',
+        'pageSize':1000000,
+        'pageList':[1000000],
+        'border':false,
+        view: detailview,
+        'onClickRow':function(rowIndex, rowData){
+        lockadmin_cloglock_show();
+        },
+        'onLoadSuccess':function(data){
+            var rows = $('#lockadmin_lock_list').datagrid('getRows')
+            if (rows.length>0){
+                $('#lockadmin_lock_list').datagrid('selectRow',0);
+                lockadmin_cloglock_show();
+            }
+        },
+        detailFormatter: function(rowIndex, rowData){   
+            return '<pre style="margin-top: 5px;margin-bottom: 5px;">' + rowData.query +  '</pre>' ;
+        }
+    });  
+ 
+ 
+ //设置阻塞锁表格的格式
+    $('#lockadmin_cloglock_list').datagrid({
+        'rownumbers':true,
+        'singleSelect':true,
+        'checkOnSelect':false,
+        'selectOnCheck':false,
+        'method':'post',
+        'sortName':'pid',
+        'sortOrder':'asc',  
+        'fitColumns':false,
+        'multiSort':false,
+        'pagination':false,
+        'remoteSort':true,
+        'height':'98%',
+        'width':'99%',
+        'idField':'pid',
+        'pageSize':1000000,
+        'pageList':[1000000],
+        'border':false,
+        view: detailview,
+        detailFormatter: function(rowIndex, rowData){   
+            return '<pre style="margin-top: 5px;margin-bottom: 5px;">' + rowData.query +  '</pre>' ;
+        }
+    });  
+ 
+ 
+    //打开页面时初始化
+    function lockadmin_init(){
+        var row = $('#dg').datagrid('getSelected');    
+        if (!row){
+            var rows = $('#dg').datagrid('getChecked');  
+            if (rows.length!=1){
+            $('#lockadmin_dialog').dialog('close'); 
+                $.messager.alert('系统提示',"请选择要查看的节点", 'warning');    
+                return;
+            }
+            $('#dg').datagrid('selectRow',$('#dg').datagrid('getRowIndex',rows[0]));
+            var row = $('#dg').datagrid('getSelected');      
+        }  
+        
+        $.ajax({
+            type:"POST",
+            url:"/get_database_list/",
+            data:{id:row.id},
+            success:function(result){
+                if (result.return_code=="FAIL"){                       
+                    if ( result.show_login_dialog == 1){   
+                        $('#lockadmin_dialog').dialog('close'); 
+                        $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                    }
+                    else{
+                        $.messager.alert('错误提示',result.return_msg, 'error');   
+                    }
+                }
+                else{
+                    result.unshift({ "datname": "", "dattext": "所有数据库" });  
+                    $('#lockadmin_database_list').datagrid('loadData', { total: result.length, rows: result });  
+                }  
+            },
+            dataType:"json"
+        });  
+    }
+ 
+    //显示选择数据库的受阻塞锁列表
+    function lockadmin_lock_show(){
+        $('#lockadmin_lock_list').datagrid('loadData', { total: 0, rows: [] }); 
+        $('#lockadmin_cloglock_list').datagrid('loadData', { total: 0, rows: [] });
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#lockadmin_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+        }  
+        var row = $('#lockadmin_database_list').datagrid('getSelected');  
+        if (!row){
+            $.messager.alert('系统提示',"请选择要查看的数据库", 'warning');   
+            return
+        }  
+        //显示受阻塞锁数据
+        $('#lockadmin_lock_list').datagrid({'url':'/lockadmin_lock_list/?id='+noderow.id+'&datname='+row.datname}); 
+    }
+ 
+    //显示某个进程的阻塞锁数据
+    function lockadmin_cloglock_show(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#lockadmin_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+        }    
+        var row = $('#lockadmin_database_list').datagrid('getSelected');  
+        if (!row){
+            $.messager.alert('系统提示',"请选择要查看的数据库", 'warning');   
+            return
+        }  
+        var pidrow = $('#lockadmin_lock_list').datagrid('getSelected');  
+        if (!pidrow){
+            $.messager.alert('系统提示',"请选择要查看的进程", 'warning');   
+            return
+        }
+        //显示阻塞某个进程的锁数据
+        $('#lockadmin_cloglock_list').datagrid({'url':'/lockadmin_cloglock_list/?id='+noderow.id+'&datname='+row.datname+"&pid="+pidrow.pid}); 
+    }
+
+    //取消查询
+    $('#lockadmin_dialog_cancelquery').unbind('click').bind('click', function(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#lockadmin_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+            return;
+        }  
+        var rows = $('#lockadmin_cloglock_list').datagrid('getChecked'); 
+        if ( rows.length < 1 ){
+            $.messager.alert('系统提示',"请选择要取消查询的进程", 'warning'); 
+            return;
+        }
+        var pid  = "" 
+        for (var i=0; i<rows.length; i++){
+            pid = pid + rows[i].pid + ',' ;
+        }
+        pid=pid.substring(0,pid.length-1);
+        $.messager.confirm('查询取消确认','你确认要执行查询取消操作吗', function(r){
+            if (r){
+                $.ajax({
+                    type:"POST",
+                    url:"/lockadmin_cancelquery/",
+                    data:{id:noderow.id,pid:pid},
+                    success:function(result){
+                        if (result.return_code=="FAIL"){                       
+                            if ( result.show_login_dialog == 1){   
+                                $('#lockadmin_dialog').dialog('close'); 
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                            else{
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                        }
+                        else{
+                            //执行成功，刷新显示数据库的进程数据
+                            lockadmin_lock_show();
+                        }  
+                    },
+                    dataType:"json"
+                });            
+            }
+        }); 
+        
+    }); 
+ 
+    //杀死进程
+    $('#lockadmin_dialog_killprocess').unbind('click').bind('click', function(){
+        var noderow = $('#dg').datagrid('getSelected');
+        if (!noderow){
+            $('#lockadmin_dialog').dialog('close'); 
+            $.messager.alert('系统提示',"请选择要操作的节点", 'warning'); 
+            return;
+        }  
+        var rows = $('#lockadmin_cloglock_list').datagrid('getChecked'); 
+        if ( rows.length < 1 ){
+            $.messager.alert('系统提示',"请选择要杀死的进程", 'warning'); 
+            return;
+        }
+        var pid  = "" 
+        for (var i=0; i<rows.length; i++){
+            pid = pid + rows[i].pid + ',' ;
+        }
+        pid=pid.substring(0,pid.length-1);
+        $.messager.confirm('进程杀死确认','你确认要执行进程杀死操作吗', function(r){
+            if (r){
+                $.ajax({
+                    type:"POST",
+                    url:"/lockadmin_killprocess/",
+                    data:{id:noderow.id,pid:pid},
+                    success:function(result){
+                        if (result.return_code=="FAIL"){                       
+                            if ( result.show_login_dialog == 1){   
+                                $('#lockadmin_dialog').dialog('close'); 
+                                $('#login_dialog').dialog('open').dialog('center').dialog('setTitle','系统无法训别你的身份--操作员重新登录'); 
+                            }
+                            else{
+                                $.messager.alert('错误提示',result.return_msg, 'error');   
+                            }
+                        }
+                        else{
+                            //执行成功，刷新显示数据库的进程数据
+                            lockadmin_lock_show();
+                        }  
+                    },
+                    dataType:"json"
+                });            
+            }
+        }); 
+        
+    }); 
+
+    //进程管理窗口－－取消按钮
+    $('#lockadmin_dialog_cancel').unbind('click').bind('click', function(){
+        $('#lockadmin_dialog').dialog('close'); 
+    });   
+ 
+    //打开窗口时初始化
+    lockadmin_init();
+ 
+});
+
+</script>
