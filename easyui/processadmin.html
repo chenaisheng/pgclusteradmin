@@ -145,6 +145,7 @@ $(document).ready(function()
             return
         }		
         //显示进程数据
+		$('#processadmin_process_list').datagrid('clearChecked');
         $('#processadmin_process_list').datagrid({'url':'/processadmin_process_list/?id='+noderow.id+'&datname='+row.datname});	
     }
 

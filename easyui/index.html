@@ -880,8 +880,10 @@
 <div id="lockadmin_dialog" class="easyui-dialog" data-options="modal:true,buttons:'#lockadmin_dialog_button',closed:true,width:1250,height:550,resizable:true,closable:true,maximizable:true,iconCls:'icon-unlock'"> <!--modal是遮罩层--> 
 </div> 
 <div id="lockadmin_dialog_button">
-  <a href="javascript:void(0)" class="easyui-linkbutton" id="lockadmin_dialog_cancelquery" data-options="iconCls:'icon-cancelquery',width:100">取消查询</a>  
-  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="lockadmin_dialog_killprocess" data-options="iconCls:'icon-killprocess',width:100">杀死进程</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="lockadmin_dialog_cancelquery" data-options="iconCls:'icon-cancelquery',width:100,disabled:true">取消查询</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton c5" id="lockadmin_dialog_killprocess" data-options="iconCls:'icon-killprocess',width:100,disabled:true">杀死进程</a>      
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="lockadmin_dialog_commit" data-options="iconCls:'icon-commit',width:100,disabled:true">提交事务</a>  
+  <a href="javascript:void(0)" class="easyui-linkbutton" id="lockadmin_dialog_rollback" data-options="iconCls:'icon-rollback',width:100,disabled:true">回滚事务</a>      
   <a href="javascript:void(0)" class="easyui-linkbutton" id="lockadmin_dialog_cancel" data-options="iconCls:'icon-cancel',width:80">取消</a>
 </div>           
 <!--表锁管理窗口-->

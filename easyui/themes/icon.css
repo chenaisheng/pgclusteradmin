@@ -136,6 +136,12 @@
 .icon-cancelquery{
  background:url('icons/cancelquery.png') no-repeat center center;
 }
+.icon-commit{
+ background:url('icons/commit.png') no-repeat center center;
+}
+.icon-rollback{
+ background:url('icons/rollback.png') no-repeat center center;
+}
 
 .icon-mini-add{
 	background:url('icons/mini_add.png') no-repeat center center;

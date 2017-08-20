@@ -196,10 +196,16 @@ func main() {
 	http.HandleFunc("/lockadmin_lock_list/", lockadmin_lock_listHandler)
 	//管理工具－－表锁管理－－获取阻塞某个进程的锁列表
 	http.HandleFunc("/lockadmin_cloglock_list/", lockadmin_cloglock_listHandler)
+	//管理工具－－表锁管理－－获取阻塞某个进程的二阶段提交
+	http.HandleFunc("/lockadmin_2pc_list/", lockadmin_2pc_listHandler)
 	//管理工具－－表锁管理－－取消查询
 	http.HandleFunc("/lockadmin_cancelquery/", lockadmin_cancelqueryHandler)
 	//管理工具－－表锁管理－－杀死进程
 	http.HandleFunc("/lockadmin_killprocess/", lockadmin_killprocessHandler)
+	//管理工具－－表锁管理－－回滚事务
+	http.HandleFunc("/lockadmin_rollback/", lockadmin_rollbackHandler)
+	//管理工具－－表锁管理－－提交事务
+	http.HandleFunc("/lockadmin_commit/", lockadmin_commitHandler)
 
 	//管理工具－－查询统计－－获取某个数据库或所有数据库的查询统计列表
 	http.HandleFunc("/querycount_record_list/", querycount_record_listHandler)
@@ -6693,6 +6699,7 @@ r   -- http.Request指针
 func processadmin_process_listHandler(w http.ResponseWriter, r *http.Request) {
 	//节点行信息json结构
 	type List struct {
+		Id                     int64  `json:"id"`
 		Pid                    int64  `json:"pid"`
 		Datname                string `json:"datname"`
 		Client_addr            string `json:"client_addr"`
@@ -6774,6 +6781,7 @@ func processadmin_process_listHandler(w http.ResponseWriter, r *http.Request) {
 
 	sql = `
 	SELECT
+		pg_stat_activity.pid::bigint AS id,
 		pg_stat_activity.pid::bigint,
 		pg_stat_activity.datname,
 		pg_stat_activity.client_addr::text,
@@ -6811,6 +6819,7 @@ func processadmin_process_listHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var row List
 		err = rows.Scan(
+			&row.Id,
 			&row.Pid,
 			&row.Datname,
 			&row.Client_addr,
@@ -6966,6 +6975,14 @@ func lockadmin_lock_listHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	error_msg = "管理工具－－进程管理－－获取某个数据库或所有数据库的受阻塞锁列表－－节点ID号为[" + r.FormValue("id") + "]－－数据库datname为[" + r.FormValue("datname") + "]－－"
 
+	//判断数据库是否为空
+	if r.FormValue("datname") == "" {
+		error_msg = error_msg + "数据库datname不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
 	//判断节点id合法性
 	id, err := strconv.Atoi(r.FormValue("id"))
 	if err != nil {
@@ -6992,7 +7009,7 @@ func lockadmin_lock_listHandler(w http.ResponseWriter, r *http.Request) {
 	config.Host = noderow.Host
 	config.User = noderow.Pg_user
 	config.Password = noderow.Pg_password
-	config.Database = noderow.Pg_database
+	config.Database = r.FormValue("datname")
 	config.Port = noderow.Pg_port
 	conn, err = pgx.Connect(config)
 	if err != nil {
@@ -7012,7 +7029,7 @@ func lockadmin_lock_listHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sql = `
-	SELECT
+	SELECT		
 	    pg_locks.locktype, 
 	    pg_locks.pid,
 	    pg_locks.mode,
@@ -7030,7 +7047,7 @@ func lockadmin_lock_listHandler(w http.ResponseWriter, r *http.Request) {
 		end::integer AS mode_level,
 	    pg_locks.granted::text,
 	    COALESCE(pg_stat_activity.datname,'') AS datname,
-	    COALESCE(pg_namespace.nspname,'') AS nspname,
+	    COALESCE(pg_namespace.nspname::text,'') AS nspname,
 	    COALESCE(pg_class.relname,'') AS relname, 	    
 	    COALESCE(pg_class.relkind::text,'') AS relkind,   
 	    COALESCE(pg_locks.page::TEXT,'') AS page,
@@ -7055,7 +7072,6 @@ func lockadmin_lock_listHandler(w http.ResponseWriter, r *http.Request) {
 	    LEFT OUTER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid=pg_class.relnamespace
 	    LEFT OUTER JOIN pg_catalog.pg_stat_activity AS pg_stat_activity ON pg_stat_activity.pid=pg_locks.pid	
 	` + where + sql_sort(r)
-
 	rows, err = conn.Query(sql)
 	defer rows.Close()
 
@@ -7124,6 +7140,7 @@ r   -- http.Request指针
 func lockadmin_cloglock_listHandler(w http.ResponseWriter, r *http.Request) {
 	//节点行信息json结构
 	type List struct {
+		Id                     int64  `json:"id"`
 		Locktype               string `json:"locktype"`
 		Pid                    int64  `json:"pid"`
 		Mode                   string `json:"mode"`
@@ -7165,7 +7182,15 @@ func lockadmin_cloglock_listHandler(w http.ResponseWriter, r *http.Request) {
 		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
 		return
 	}
-	error_msg = "管理工具－－进程管理－－获取某个数据库或所有数据库的受阻塞锁列表－－节点ID号为[" + r.FormValue("id") + "]－－进程号pid值为[" + r.FormValue("pid") + "]－－"
+	error_msg = "管理工具－－进程管理－－获取阻塞某个进程的锁列表－－节点ID号为[" + r.FormValue("id") + "]－－进程号pid值为[" + r.FormValue("pid") + "]－－"
+
+	//判断pid合法性
+	if r.FormValue("datname") == "" {
+		error_msg = error_msg + "数据库datname不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
 
 	//判断pid合法性
 	_, err := strconv.Atoi(r.FormValue("pid"))
@@ -7202,7 +7227,7 @@ func lockadmin_cloglock_listHandler(w http.ResponseWriter, r *http.Request) {
 	config.Host = noderow.Host
 	config.User = noderow.Pg_user
 	config.Password = noderow.Pg_password
-	config.Database = noderow.Pg_database
+	config.Database = r.FormValue("datname")
 	config.Port = noderow.Pg_port
 	conn, err = pgx.Connect(config)
 	if err != nil {
@@ -7241,6 +7266,7 @@ func lockadmin_cloglock_listHandler(w http.ResponseWriter, r *http.Request) {
 
 	sql = `
 	SELECT
+		pg_locks.pid AS id,
 	    pg_locks.locktype, 
 	    pg_locks.pid,
 	    pg_locks.mode,
@@ -7317,6 +7343,7 @@ func lockadmin_cloglock_listHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var row List
 		err = rows.Scan(
+			&row.Id,
 			&row.Locktype,
 			&row.Pid,
 			&row.Mode,
@@ -7342,6 +7369,202 @@ func lockadmin_cloglock_listHandler(w http.ResponseWriter, r *http.Request) {
 			&row.Wait_event,
 			&row.State,
 			&row.Query)
+		if err != nil {
+			error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+			OutputJson(w, "FAIL", error_msg, 0)
+			go write_log(remote_ip, modlename, username, "Error", error_msg)
+			return
+		}
+		data.Rows = append(data.Rows, row)
+	}
+	data.Total = len(data.Rows)
+	ret, _ := json.Marshal(data)
+	w.Write(ret)
+}
+
+/*
+功能描述：管理工具－－进程管理－－获取阻塞某个进程的二阶段提交列表
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func lockadmin_2pc_listHandler(w http.ResponseWriter, r *http.Request) {
+	//节点行信息json结构
+	type List struct {
+		Id            string `json:"id"`
+		Transaction   string `json:"transaction"`
+		Gid           string `json:"gid"`
+		Prepared      string `json:"prepared"`
+		Prepared_time string `json:"prepared_time"`
+		Locktype      string `json:"locktype"`
+		Mode          string `json:"mode"`
+		Mode_level    int32  `json:"mode_level"`
+		Owner         string `json:"owner"`
+		Database      string `json:"database"`
+		Nspname       string `json:"nspname"`
+		Relname       string `json:"relname"`
+		Relkind       string `json:"relkind"`
+		Page          string `json:"page"`
+		Tuple         string `json:"tuple"`
+	}
+
+	//定义列表返回的struct
+	type ListData struct {
+		Total int    `json:"total"`
+		Rows  []List `json:"rows"`
+	}
+
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_2pc_listHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－进程管理－－获取阻塞某个进程的二阶段提交列表－－节点ID号为[" + r.FormValue("id") + "]－－数据库datname值为[" + r.FormValue("datname") + "]－－"
+
+	//判断datname的合法性
+	if r.FormValue("datname") == "" {
+		error_msg = error_msg + "数据库datname不能为空"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//判断pid合法性
+	_, err := strconv.Atoi(r.FormValue("pid"))
+	if err != nil {
+		error_msg = error_msg + "进程号pid不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//判断节点id合法性
+	id, err := strconv.Atoi(r.FormValue("id"))
+	if err != nil {
+		error_msg = error_msg + "节点id号不是合法的int类型"
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		error_msg = error_msg + "获取节点资料失败－－详情：" + noderow.Return_msg
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = r.FormValue("datname")
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		error_msg = error_msg + "连接数据库失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	var rows *pgx.Rows
+
+	sql = `
+	SELECT 
+		pg_prepared_xacts.transaction::text AS id,
+	    pg_prepared_xacts.transaction::text, 
+	    pg_prepared_xacts.gid::text,
+	    pg_prepared_xacts.prepared::text,
+		(now()-pg_prepared_xacts.prepared)::text AS prepared_time,
+		pg_locks.locktype,
+		pg_locks.mode,
+		case pg_locks.mode    
+			when 'INVALID' then 0   
+			when 'AccessShareLock' then 1   
+			when 'RowShareLock' then 2   
+			when 'RowExclusiveLock' then 3   
+			when 'ShareUpdateExclusiveLock' then 4   
+			when 'ShareLock' then 5   
+			when 'ShareRowExclusiveLock' then 6   
+			when 'ExclusiveLock' then 7   
+			when 'AccessExclusiveLock' then 8   
+			else 0   
+		end::integer AS mode_level,
+	    pg_prepared_xacts.owner::text,
+	    pg_prepared_xacts.database::text,
+		COALESCE(pg_namespace.nspname,'') AS nspname,
+		COALESCE(pg_class.relname,'') AS relname,      
+		COALESCE(pg_class.relkind::text,'') AS relkind,   
+		COALESCE(pg_locks.page::TEXT,'') AS page,
+		COALESCE(pg_locks.tuple::TEXT,'') AS tuple
+	FROM 
+	    pg_catalog.pg_locks AS pg_locks
+		LEFT OUTER JOIN pg_catalog.pg_class AS pg_class ON pg_class.oid=pg_locks.relation
+		LEFT OUTER JOIN pg_catalog.pg_namespace AS pg_namespace ON pg_namespace.oid=pg_class.relnamespace 
+	    INNER JOIN pg_catalog.pg_prepared_xacts AS pg_prepared_xacts ON pg_locks.virtualtransaction = '-1/' || pg_prepared_xacts.transaction
+	    INNER JOIN pg_catalog.pg_locks AS prepare_commit ON (
+		    pg_locks.locktype is not distinct from prepare_commit.locktype
+		    AND pg_locks.database is not distinct from prepare_commit.database
+		    AND pg_locks.relation is not distinct from prepare_commit.relation
+		    AND pg_locks.page is not distinct from prepare_commit.page   
+		    AND pg_locks.tuple is not distinct from prepare_commit.tuple   
+		    AND pg_locks.virtualxid is not distinct from prepare_commit.virtualxid   
+		    AND pg_locks.transactionid is not distinct from prepare_commit.transactionid   
+		    AND pg_locks.classid is not distinct from prepare_commit.classid   
+		    AND pg_locks.objid is not distinct from prepare_commit.objid   
+		    AND pg_locks.objsubid is not distinct from prepare_commit.objsubid
+			AND prepare_commit.pid=` + sql_data_encode(r.FormValue("pid")) + ` 
+		    AND prepare_commit.granted = false
+	    )
+	` + sql_sort(r)
+
+	rows, err = conn.Query(sql)
+	defer rows.Close()
+
+	if err != nil {
+		error_msg = error_msg + "执行查询失败，详情：" + err.Error()
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	}
+
+	var data ListData = ListData{}
+	data.Rows = make([]List, 0)
+	data.Total = 0
+	for rows.Next() {
+		var row List
+		err = rows.Scan(
+			&row.Id,
+			&row.Transaction,
+			&row.Gid,
+			&row.Prepared,
+			&row.Prepared_time,
+			&row.Locktype,
+			&row.Mode,
+			&row.Mode_level,
+			&row.Owner,
+			&row.Database,
+			&row.Nspname,
+			&row.Relname,
+			&row.Relkind,
+			&row.Page,
+			&row.Tuple)
 		if err != nil {
 			error_msg = error_msg + "执行查询失败，详情：" + err.Error()
 			OutputJson(w, "FAIL", error_msg, 0)
@@ -7412,6 +7635,76 @@ func lockadmin_killprocessHandler(w http.ResponseWriter, r *http.Request) {
 	error_msg = "管理工具－－表锁管理－－杀死进程－－节点ID号为[" + r.FormValue("id") + "]－－要杀死的pid为[" + r.FormValue("pid") + "]－－"
 
 	ret_code, ret_result := precess_killprecess(r.FormValue("id"), r.FormValue("pid"))
+	if ret_code == "FAIL" {
+		error_msg = error_msg + ret_result
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	} else {
+		logcontent := error_msg + ret_result
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
+		return
+	}
+}
+
+/*
+功能描述：管理工具－－表锁管理－－提交事务
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func lockadmin_commitHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_commitHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－表锁管理－－提交事务－－节点ID号为[" + r.FormValue("id") + "]－－数据库名称datname为[" + r.FormValue("datname") + "]－－事务标识号gid为[" + r.FormValue("gid") + "]－－"
+
+	ret_code, ret_result := commit_prepared(r.FormValue("id"), r.FormValue("datname"), r.FormValue("gid"))
+	if ret_code == "FAIL" {
+		error_msg = error_msg + ret_result
+		OutputJson(w, "FAIL", error_msg, 0)
+		go write_log(remote_ip, modlename, username, "Error", error_msg)
+		return
+	} else {
+		logcontent := error_msg + ret_result
+		OutputJson(w, "SUCCESS", "执行成功！", 0)
+		go write_log(remote_ip, modlename, username, "Log", logcontent)
+		return
+	}
+}
+
+/*
+功能描述：管理工具－－表锁管理－－回滚事务
+
+参数说明：
+w   -- http.ResponseWriter
+r   -- http.Request指针
+
+返回值说明：无
+*/
+
+func lockadmin_rollbackHandler(w http.ResponseWriter, r *http.Request) {
+	var error_msg string
+	remote_ip := get_remote_ip(r)
+	modlename := "lockadmin_rollbackHandler"
+	username := http_init(w, r)
+	if username == "" {
+		OutputJson(w, "FAIL", "系统无法识别你的身份", 1)
+		return
+	}
+	error_msg = "管理工具－－表锁管理－－回滚事务－－节点ID号为[" + r.FormValue("id") + "]－－数据库名称datname为[" + r.FormValue("datname") + "]－－事务标识号gid为[" + r.FormValue("gid") + "]－－"
+
+	ret_code, ret_result := rollback_prepared(r.FormValue("id"), r.FormValue("datname"), r.FormValue("gid"))
 	if ret_code == "FAIL" {
 		error_msg = error_msg + ret_result
 		OutputJson(w, "FAIL", error_msg, 0)
@@ -7778,6 +8071,168 @@ func querycount_record_listHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 /*
+功能描述：rollback_prepared 回滚等提交的事务
+
+参数说明：
+nodeid   -- 字符类型，节点的id号
+datname  -- 要操作的数据库名称
+gid --事务标识符字符串，标识符拼接字符串，如2pc03,2pc01,2pc08
+
+返回值说明：
+return_code -- 返回错误代号，值为FAIL或者SUCCESS
+return_msg  -- 返回错误或成功的详细信息
+*/
+
+func rollback_prepared(nodeid string, datname string, gid string) (return_code string, return_msg string) {
+	//判断节点id合法性
+	id, err := strconv.Atoi(nodeid)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "节点id号不是合法的int类型"
+		return
+	}
+
+	//判断datname是否合法
+	if gid == "" {
+		return_code = "FAIL"
+		return_msg = "要操作的数据库datname值不能为空"
+		return
+	}
+
+	//判断gid是否合法
+	if gid == "" {
+		return_code = "FAIL"
+		return_msg = "要回滚等提交的事务gid值不能为空"
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		return_code = "FAIL"
+		return_msg = "获取节点资料失败－－详情：" + noderow.Return_msg
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = datname
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "连接数据库失败，详情：" + err.Error()
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	gids := strings.Split(gid, ",")
+	len := len(gids)
+	for i := 0; i < len; i++ {
+		sql = "rollback prepared '" + sql_data_encode(gids[i]) + "'"
+		_, err = conn.Exec(sql)
+		if err != nil {
+			return_code = "FAIL"
+			return_msg = "执行查询失败，详情：" + err.Error()
+			return
+		}
+	}
+
+	result := "回滚事务成功！"
+	return_code = "SUCCESS"
+	return_msg = result
+	return
+}
+
+/*
+功能描述：commit_prepared 提交等提交的事务
+
+参数说明：
+nodeid   -- 字符类型，节点的id号
+datname  -- 要操作的数据库名称
+gid --事务标识符字符串，标识符拼接字符串，如2pc03,2pc01,2pc08
+
+返回值说明：
+return_code -- 返回错误代号，值为FAIL或者SUCCESS
+return_msg  -- 返回错误或成功的详细信息
+*/
+
+func commit_prepared(nodeid string, datname string, gid string) (return_code string, return_msg string) {
+	//判断节点id合法性
+	id, err := strconv.Atoi(nodeid)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "节点id号不是合法的int类型"
+		return
+	}
+
+	//判断datname是否合法
+	if gid == "" {
+		return_code = "FAIL"
+		return_msg = "要操作的数据库datname值不能为空"
+		return
+	}
+
+	//判断gid是否合法
+	if gid == "" {
+		return_code = "FAIL"
+		return_msg = "要提交等提交的事务gid值不能为空"
+		return
+	}
+
+	//获取节点资料
+	row_chan := make(chan Row)
+	go get_node_row(id, row_chan)
+	noderow := <-row_chan
+	if noderow.Return_code == "FAIL" {
+		return_code = "FAIL"
+		return_msg = "获取节点资料失败－－详情：" + noderow.Return_msg
+		return
+	}
+
+	//连接数据库
+	var conn *pgx.Conn
+	var config pgx.ConnConfig
+	config.Host = noderow.Host
+	config.User = noderow.Pg_user
+	config.Password = noderow.Pg_password
+	config.Database = datname
+	config.Port = noderow.Pg_port
+	conn, err = pgx.Connect(config)
+	if err != nil {
+		return_code = "FAIL"
+		return_msg = "连接数据库失败，详情：" + err.Error()
+		return
+	}
+	defer conn.Close()
+
+	sql := ""
+	gids := strings.Split(gid, ",")
+	len := len(gids)
+	for i := 0; i < len; i++ {
+		sql = "commit prepared '" + sql_data_encode(gids[i]) + "'"
+		_, err = conn.Exec(sql)
+		if err != nil {
+			return_code = "FAIL"
+			return_msg = "执行查询失败，详情：" + err.Error()
+			return
+		}
+	}
+
+	result := "提交事务成功！"
+	return_code = "SUCCESS"
+	return_msg = result
+	return
+}
+
+/*
 功能描述：precess_cancelquery 取消指定进程的当前查询
 
 参数说明：
@@ -7801,7 +8256,7 @@ func precess_cancelquery(nodeid string, process_pid string) (return_code string,
 	//判断pid是否合法
 	if process_pid == "" {
 		return_code = "FAIL"
-		return_msg = "要取消查询的pid值为空"
+		return_msg = "要取消查询的pid值不能为空"
 		return
 	}
 
@@ -7897,7 +8352,7 @@ func precess_killprecess(nodeid string, process_pid string) (return_code string,
 	//判断pid是否合法
 	if process_pid == "" {
 		return_code = "FAIL"
-		return_msg = "要杀死的进程pid值为空"
+		return_msg = "要杀死的进程pid值不能为空"
 		return
 	}
 
@@ -8435,31 +8890,31 @@ key -- postgres用户的私钥证书,证书类型可以是“DSA”或“RSA”
 
 func get_postgres_private_key() (key string) {
 	postgres_private_key := `-----BEGIN RSA PRIVATE KEY-----
-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
+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
 -----END RSA PRIVATE KEY-----`
 	return postgres_private_key
 }
@@ -8475,31 +8930,31 @@ key -- root用户的私钥证书,证书类型可以是“DSA”或“RSA”
 
 func get_root_private_key() (key string) {
 	root_private_key := `-----BEGIN RSA PRIVATE KEY-----
-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
+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
 -----END RSA PRIVATE KEY-----`
 	return root_private_key
 }
